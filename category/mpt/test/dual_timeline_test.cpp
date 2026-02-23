@@ -62,14 +62,12 @@ namespace
     struct DualTimelineFixture : public ::testing::Test
     {
         std::filesystem::path const dbname{create_temp_file(8)};
-        StateMachineAlwaysMerkle primary_machine;
-        StateMachineAlwaysMerkle secondary_machine;
         OnDiskDbConfig config{
             .compaction = true,
             .sq_thread_cpu = std::nullopt,
             .dbname_paths = {dbname},
             .fixed_history_length = MPT_TEST_HISTORY_LENGTH};
-        Db db{primary_machine, config};
+        Db db{std::make_unique<StateMachineAlwaysMerkle>(), config};
         std::optional<Db> secondary_db;
 
         Node::SharedPtr primary_root;
@@ -92,7 +90,7 @@ namespace
         void activate_secondary(uint64_t fork_version)
         {
             secondary_db.emplace(db.activate_secondary_timeline(
-                secondary_machine, fork_version));
+                std::make_unique<StateMachineAlwaysMerkle>(), fork_version));
         }
 
         void deactivate_secondary()
@@ -109,14 +107,15 @@ namespace
 
         // Close and reopen the primary Db against the same file, as
         // production would after promote.
-        void reopen_primary_with(StateMachine &machine)
+        void reopen_primary()
         {
             {
                 Db const expired = std::move(db);
             }
             OnDiskDbConfig reopen_config = config;
             reopen_config.append = true;
-            db = Db{machine, reopen_config};
+            db =
+                Db{std::make_unique<StateMachineAlwaysMerkle>(), reopen_config};
         }
 
         Node::SharedPtr upsert_kv(
@@ -165,7 +164,9 @@ namespace
     TEST_F(DualTimelineFixture, open_secondary_timeline_factory)
     {
         // No secondary yet
-        EXPECT_FALSE(db.open_secondary_timeline(secondary_machine).has_value());
+        EXPECT_FALSE(db.open_secondary_timeline(
+                           std::make_unique<StateMachineAlwaysMerkle>())
+                         .has_value());
 
         activate_secondary(0);
 
@@ -176,7 +177,8 @@ namespace
         EXPECT_TRUE(db.timeline_active(timeline_id::secondary));
 
         // Reattach via open_secondary_timeline
-        auto reopened = db.open_secondary_timeline(secondary_machine);
+        auto reopened = db.open_secondary_timeline(
+            std::make_unique<StateMachineAlwaysMerkle>());
         ASSERT_TRUE(reopened.has_value());
 
         // The reattached Db can upsert and read secondary data
@@ -195,7 +197,9 @@ namespace
         db.deactivate_secondary_timeline();
 
         // After deactivate, open returns nullopt again
-        EXPECT_FALSE(db.open_secondary_timeline(secondary_machine).has_value());
+        EXPECT_FALSE(db.open_secondary_timeline(
+                           std::make_unique<StateMachineAlwaysMerkle>())
+                         .has_value());
     }
 
     // -------------------------------------------------------------------
@@ -406,9 +410,8 @@ namespace
         promote_secondary();
 
         // Simulate production close+reopen: drop the current (now
-        // machine-less) Db and reopen bound to secondary_machine, which
-        // is the authoritative machine for what is now the primary trie.
-        reopen_primary_with(secondary_machine);
+        // machine-less) Db and reopen
+        reopen_primary();
 
         // After promotion:
         // - What was secondary is now primary (has v3_secondary for k3)
@@ -577,10 +580,9 @@ namespace
                 upsert_kv(secondary_root, k2, k2, v, timeline_id::secondary);
         }
 
-        // Phase 4: Promote secondary, then reopen RWDb bound to the
-        // secondary_machine (authoritative for the now-primary trie).
+        // Phase 4: Promote secondary, then reopen RWDb
         promote_secondary();
-        reopen_primary_with(secondary_machine);
+        reopen_primary();
         EXPECT_TRUE(db.timeline_active(timeline_id::primary));
         EXPECT_TRUE(db.timeline_active(timeline_id::secondary));
 
@@ -710,14 +712,12 @@ namespace
         static constexpr uint64_t SHORT_HISTORY = 20;
 
         std::filesystem::path const dbname{create_temp_file(8)};
-        StateMachineAlwaysMerkle primary_machine;
-        StateMachineAlwaysMerkle secondary_machine;
         OnDiskDbConfig config{
             .compaction = true,
             .sq_thread_cpu = std::nullopt,
             .dbname_paths = {dbname},
             .fixed_history_length = SHORT_HISTORY};
-        Db db{primary_machine, config};
+        Db db{std::make_unique<StateMachineAlwaysMerkle>(), config};
         std::optional<Db> secondary_db;
 
         Node::SharedPtr primary_root;
@@ -740,7 +740,7 @@ namespace
         void activate_secondary(uint64_t fork_version)
         {
             secondary_db.emplace(db.activate_secondary_timeline(
-                secondary_machine, fork_version));
+                std::make_unique<StateMachineAlwaysMerkle>(), fork_version));
         }
 
         void deactivate_secondary()

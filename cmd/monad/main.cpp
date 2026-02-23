@@ -275,12 +275,10 @@ try {
     if (!statesync.empty()) {
         net.emplace(statesync.c_str());
     }
-    std::unique_ptr<mpt::StateMachine> machine;
     mpt::Db db = [&] {
         if (!db_in_memory) {
-            machine = std::make_unique<OnDiskMachine>();
             return mpt::Db{
-                *machine,
+                std::make_unique<OnDiskMachine>(),
                 mpt::OnDiskDbConfig{
                     .append = true,
                     .compaction = !no_compaction,
@@ -291,8 +289,7 @@ try {
                     .sq_thread_cpu = sq_thread_cpu,
                     .dbname_paths = dbname_paths}};
         }
-        machine = std::make_unique<InMemoryMachine>();
-        return mpt::Db{*machine};
+        return mpt::Db{std::make_unique<InMemoryMachine>()};
     }();
 
     auto chain = [chain_config] -> std::unique_ptr<Chain> {
@@ -416,14 +413,13 @@ try {
 
     // Optional secondary db for migration: commits go through both the
     // primary (slot storage, DbCache) and the secondary (page storage, raw).
-    std::unique_ptr<MonadOnDiskMachine> secondary_machine;
     std::optional<mpt::Db> secondary_db;
     std::optional<TrieDb> secondary_triedb;
     if (dual_db_migration_mode) {
         MONAD_ASSERT(
             db.timeline_active(monad::mpt::timeline_id::secondary) == true);
-        secondary_machine = std::make_unique<MonadOnDiskMachine>();
-        secondary_db = db.open_secondary_timeline(*secondary_machine);
+        secondary_db =
+            db.open_secondary_timeline(std::make_unique<MonadOnDiskMachine>());
         MONAD_ASSERT(secondary_db.has_value());
         secondary_triedb.emplace(*secondary_db);
     }

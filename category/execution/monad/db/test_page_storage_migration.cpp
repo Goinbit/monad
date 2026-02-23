@@ -161,12 +161,10 @@ TEST(MigrationFork, dual_write_state_root_handoff)
     ASSERT_EQ(compute_page_key(slot_0), compute_page_key(slot_1));
     ASSERT_NE(compute_page_key(slot_0), compute_page_key(slot_far));
 
-    OnDiskMachine machine1;
-    mpt::Db db1{machine1, mpt::OnDiskDbConfig{}};
+    mpt::Db db1{std::make_unique<OnDiskMachine>(), mpt::OnDiskDbConfig{}};
     TrieDb tdb1{db1};
 
-    MonadOnDiskMachine machine2;
-    mpt::Db db2{machine2, mpt::OnDiskDbConfig{}};
+    mpt::Db db2{std::make_unique<MonadOnDiskMachine>(), mpt::OnDiskDbConfig{}};
     TrieDb tdb2{db2};
 
     auto const make_block_id = [](uint64_t const n) {

@@ -96,6 +96,7 @@ struct Db::Impl
         size_t concurrency_limit) = 0;
     virtual void
     move_trie_version_fiber_blocking(uint64_t src, uint64_t dest) = 0;
+    virtual void reset_state_machine(std::unique_ptr<StateMachine>) = 0;
 };
 
 AsyncIOContext::AsyncIOContext(ReadOnlyOnDiskDbConfig const &options)
@@ -251,17 +252,23 @@ public:
 
         return read_node_blocking(aux(), root_offset, version, tid_);
     }
+
+    virtual void reset_state_machine(std::unique_ptr<StateMachine>) override
+    {
+        MONAD_ABORT("Db::reset_state_machine is unsupported for read-only Db");
+    }
 };
 
 class Db::InMemory final : public Db::Impl
 {
     UpdateAux aux_;
-    StateMachine &machine_;
+    std::unique_ptr<StateMachine> machine_;
 
 public:
-    explicit InMemory(StateMachine &machine)
-        : machine_{machine}
+    explicit InMemory(std::unique_ptr<StateMachine> machine)
+        : machine_{std::move(machine)}
     {
+        MONAD_ASSERT(machine_);
     }
 
     virtual UpdateAux &aux() override
@@ -275,7 +282,7 @@ public:
     {
         return aux_.do_update(
             std::move(root),
-            machine_,
+            *machine_,
             std::move(list),
             version,
             /*compaction=*/false,
@@ -324,6 +331,13 @@ public:
     {
         return nullptr;
     }
+
+    virtual void
+    reset_state_machine(std::unique_ptr<StateMachine> machine) override
+    {
+        MONAD_ASSERT(machine);
+        machine_ = std::move(machine);
+    }
 };
 
 class OnDiskDbServiceThread
@@ -333,7 +347,10 @@ public:
     {
         ::boost::fibers::promise<Node::SharedPtr> promise;
         Node::SharedPtr prev_root;
-        std::reference_wrapper<StateMachine> sm;
+        // Owned snapshot of the impl's StateMachine. Keeps the machine
+        // alive for the duration of the request, even if a concurrent
+        // reset_state_machine swaps in a new one.
+        std::shared_ptr<StateMachine> sm;
         UpdateList updates;
         uint64_t version;
         bool enable_compaction;
@@ -357,7 +374,8 @@ public:
     {
         ::boost::fibers::promise<size_t> promise;
         NodeCursor root;
-        std::reference_wrapper<StateMachine> sm;
+        // Owned snapshot of the impl's StateMachine. See FiberUpsertRequest.
+        std::shared_ptr<StateMachine> sm;
     };
 
     struct FiberTraverseRequest
@@ -529,7 +547,7 @@ private:
                              req != nullptr) {
                         req->promise.set_value(aux.do_update(
                             std::move(req->prev_root),
-                            req->sm,
+                            *req->sm,
                             std::move(req->updates),
                             req->version,
                             req->enable_compaction,
@@ -540,7 +558,7 @@ private:
                     else if (auto *req = std::get_if<3>(&request);
                              req != nullptr) {
                         req->promise.set_value(
-                            mpt::load_all(aux, req->sm, req->root));
+                            mpt::load_all(aux, *req->sm, req->root));
                     }
                     else if (auto *req = std::get_if<4>(&request);
                              req != nullptr) {
@@ -696,10 +714,11 @@ public:
 class Db::RWOnDisk final : public Impl
 {
     std::shared_ptr<OnDiskDbServiceThread> worker_thread_;
-    // Pointer (not reference) so promote_secondary_to_primary can null it:
-    // the promoted trie was written with the sibling's machine, so any upsert
-    // on this Db before close+reopen would corrupt hashes.
-    StateMachine *machine_;
+    // Atomic so reset_state_machine can store a new pointer concurrently
+    // with producer threads loading a snapshot in upsert/prefetch. The
+    // shared_ptr lets each in-flight request keep the old machine alive
+    // until its handler runs, even if a reset has since replaced the slot.
+    std::atomic<std::shared_ptr<StateMachine>> machine_;
     timeline_id const tid_;
     bool const compaction_;
 
@@ -710,13 +729,15 @@ class Db::RWOnDisk final : public Impl
 public:
     RWOnDisk(
         std::shared_ptr<OnDiskDbServiceThread> worker_thread,
-        StateMachine &machine, timeline_id const tid, bool const compaction)
+        std::unique_ptr<StateMachine> machine, timeline_id const tid,
+        bool const compaction)
         : worker_thread_(std::move(worker_thread))
-        , machine_{&machine}
+        , machine_{std::move(machine)}
         , tid_{tid}
-        , compaction_{compaction}
+        , compaction_(compaction)
     {
         MONAD_ASSERT(worker_thread_ != nullptr);
+        MONAD_ASSERT(machine_.load());
     }
 
     void clear_machine() noexcept
@@ -728,12 +749,11 @@ public:
     // same UpdateAux, AsyncIO, and storage pool) but bound to a different
     // machine + timeline. Used to mint a secondary Db that shares the
     // primary's underlying service thread.
-    std::unique_ptr<RWOnDisk>
-    spawn_sibling(StateMachine &machine, timeline_id const tid) const
+    std::unique_ptr<RWOnDisk> spawn_sibling(
+        std::unique_ptr<StateMachine> machine, timeline_id const tid) const
     {
-        MONAD_ASSERT(machine_ != nullptr);
         return std::make_unique<RWOnDisk>(
-            worker_thread_, machine, tid, compaction_);
+            worker_thread_, std::move(machine), tid, compaction_);
     }
 
     long worker_thread_use_count() const noexcept
@@ -771,7 +791,6 @@ public:
         bool const enable_compaction, bool const can_write_to_fast,
         bool const write_root) override
     {
-        MONAD_ASSERT(machine_ != nullptr);
         if (unflushed_version_ != INVALID_BLOCK_NUM &&
             unflushed_version_ != version) {
             LOG_WARNING_CFORMAT(
@@ -782,12 +801,14 @@ public:
                 unflushed_version_);
         }
         unflushed_version_ = write_root ? INVALID_BLOCK_NUM : version;
+        auto sm = machine_.load(std::memory_order_acquire);
+        MONAD_ASSERT(sm);
         ::boost::fibers::promise<Node::SharedPtr> promise;
         auto fut = promise.get_future();
         worker_thread_->submit(OnDiskDbServiceThread::FiberUpsertRequest{
             .promise = std::move(promise),
             .prev_root = std::move(root),
-            .sm = *machine_,
+            .sm = std::move(sm),
             .updates = std::move(updates),
             .version = version,
             .enable_compaction = enable_compaction && compaction_,
@@ -810,14 +831,15 @@ public:
     // threadsafe
     virtual size_t prefetch_fiber_blocking(Node::SharedPtr const &root) override
     {
-        MONAD_ASSERT(machine_ != nullptr);
+        auto sm = machine_.load(std::memory_order_acquire);
+        MONAD_ASSERT(sm);
         ::boost::fibers::promise<size_t> promise;
         auto fut = promise.get_future();
         worker_thread_->submit(
             OnDiskDbServiceThread::FiberLoadAllFromBlockRequest{
                 .promise = std::move(promise),
                 .root = NodeCursor{root},
-                .sm = *machine_});
+                .sm = std::move(sm)});
         return fut.get();
     }
 
@@ -892,6 +914,15 @@ public:
             .dest_version = dest_version,
             .write_root = write_root});
         return fut.get();
+    }
+
+    virtual void
+    reset_state_machine(std::unique_ptr<StateMachine> machine) override
+    {
+        MONAD_ASSERT(machine);
+        machine_.store(
+            std::shared_ptr<StateMachine>(std::move(machine)),
+            std::memory_order_release);
     }
 };
 
@@ -1033,14 +1064,14 @@ bool RODb::traverse(
         cursor.node, machine, block_id, concurrency_limit);
 }
 
-Db::Db(StateMachine &machine)
-    : impl_{std::make_unique<InMemory>(machine)}
+Db::Db(std::unique_ptr<StateMachine> machine)
+    : impl_{std::make_unique<InMemory>(std::move(machine))}
 {
 }
 
-Db::Db(StateMachine &machine, OnDiskDbConfig const &config)
+Db::Db(std::unique_ptr<StateMachine> machine, OnDiskDbConfig const &config)
     : impl_{std::make_unique<RWOnDisk>(
-          std::make_shared<OnDiskDbServiceThread>(config), machine,
+          std::make_shared<OnDiskDbServiceThread>(config), std::move(machine),
           timeline_id::primary, config.compaction)}
 {
     MONAD_ASSERT(impl_->aux().is_on_disk());
@@ -1275,16 +1306,19 @@ UpdateAux const &Db::aux() const
 }
 
 Db Db::activate_secondary_timeline(
-    StateMachine &secondary_machine, uint64_t const fork_version)
+    std::unique_ptr<StateMachine> secondary_machine,
+    uint64_t const fork_version)
 {
     MONAD_ASSERT(impl_);
     auto *const rw = static_cast<RWOnDisk *>(impl_.get());
     MONAD_ASSERT(rw->worker_thread_use_count() == 1);
     rw->aux().activate_secondary_timeline(fork_version);
-    return Db{rw->spawn_sibling(secondary_machine, timeline_id::secondary)};
+    return Db{rw->spawn_sibling(
+        std::move(secondary_machine), timeline_id::secondary)};
 }
 
-std::optional<Db> Db::open_secondary_timeline(StateMachine &secondary_machine)
+std::optional<Db>
+Db::open_secondary_timeline(std::unique_ptr<StateMachine> secondary_machine)
 {
     MONAD_ASSERT(impl_);
     auto *const rw = static_cast<RWOnDisk *>(impl_.get());
@@ -1292,7 +1326,8 @@ std::optional<Db> Db::open_secondary_timeline(StateMachine &secondary_machine)
     if (!rw->aux().metadata_ctx().timeline_active(timeline_id::secondary)) {
         return std::nullopt;
     }
-    return Db{rw->spawn_sibling(secondary_machine, timeline_id::secondary)};
+    return Db{rw->spawn_sibling(
+        std::move(secondary_machine), timeline_id::secondary)};
 }
 
 void Db::promote_secondary_to_primary()
@@ -1325,6 +1360,12 @@ uint64_t Db::get_history_length() const
 {
     return is_on_disk() ? impl_->aux().metadata_ctx().version_history_length()
                         : 1;
+}
+
+void Db::reset_state_machine(std::unique_ptr<StateMachine> machine)
+{
+    MONAD_ASSERT(impl_);
+    impl_->reset_state_machine(std::move(machine));
 }
 
 AsyncContext::AsyncContext(Db &db, size_t const node_lru_max_mem)

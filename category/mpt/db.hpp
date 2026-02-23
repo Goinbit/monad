@@ -104,8 +104,8 @@ private:
     explicit Db(std::unique_ptr<Impl> impl);
 
 public:
-    explicit Db(StateMachine &); // in-memory
-    Db(StateMachine &, OnDiskDbConfig const &); // on-disk RW
+    explicit Db(std::unique_ptr<StateMachine>); // In-memory mode
+    Db(std::unique_ptr<StateMachine>, OnDiskDbConfig const &); // on-disk RW
     explicit Db(AsyncIOContext &); // on-disk RO blocking
 
     Db(Db const &) = delete;
@@ -182,12 +182,12 @@ public:
     // Activate the secondary ring at `fork_version` and return a Db
     // bound to it.
     [[nodiscard]] Db activate_secondary_timeline(
-        StateMachine &secondary_machine, uint64_t fork_version);
+        std::unique_ptr<StateMachine> secondary_machine, uint64_t fork_version);
 
     // Attach to a secondary ring that was activated in a prior process
     // and persisted on disk. Returns nullopt if no secondary is active.
     [[nodiscard]] std::optional<Db>
-    open_secondary_timeline(StateMachine &secondary_machine);
+    open_secondary_timeline(std::unique_ptr<StateMachine> secondary_machine);
 
     // Swap primary and secondary slots. Clears the primary Db's
     // StateMachine binding so a missed close+reopen (the expected next
@@ -198,6 +198,8 @@ public:
     void deactivate_secondary_timeline();
 
     bool timeline_active(timeline_id tid) const;
+
+    void reset_state_machine(std::unique_ptr<StateMachine>);
 
 private:
     friend struct test::DbAccessor;
