@@ -184,15 +184,25 @@ Result<void> ExecuteSystemTransaction<traits>::execute(State &state)
     state.push();
     call_tracer_.on_enter(to_message());
 
-    // Meritium: Agent system contracts (0x1001-0x1003) are pass-through —
-    // value transfer is handled by the state layer; the calldata is logged
-    // but not executed by the C++ EVM (the Rust consensus layer already
-    // validated the oracle entries). Only route to staking for 0x1000.
+    // Meritium: Agent system contracts (0x1001-0x1003) are pass-through.
+    // For reward txs (0x1001): decode the agent wallet from calldata and
+    // mint value directly to that wallet. For audit/verification (0x1002-
+    // 0x1003): no value transfer, just log the calldata.
+    // Only route to staking for 0x1000.
     if (*tx_.to == staking::STAKING_CA) {
         BOOST_OUTCOME_TRY(execute_staking_syscall(state, tx_.data, tx_.value));
+    } else if (*tx_.to == Address{0x1001} && tx_.data.size() >= 36 && tx_.value != 0) {
+        // AgentRewardCall: calldata = selector(4) + agent_id(32) + ...
+        // agent_id is a B256 with the wallet address left-padded to 32 bytes.
+        // Extract last 20 bytes of agent_id as the wallet address.
+        Address agent_wallet;
+        std::memcpy(agent_wallet.bytes,
+                    tx_.data.data() + 4 + 12, // skip selector(4) + padding(12)
+                    20);
+        state.add_to_balance(agent_wallet, tx_.value);
     } else {
-        // Meritium oracle system tx: credit the contract address with value
-        state.add_to_balance(*tx_.to, tx_.value);
+        // 0x1002/0x1003: audit/verification — no value, just accept
+        state.add_to_balance(*tx_.to, 0);
     }
 
     call_tracer_.on_exit(evmc::Result{EVMC_SUCCESS});
