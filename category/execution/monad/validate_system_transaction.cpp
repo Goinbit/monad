@@ -56,7 +56,12 @@ static_validate_system_transaction(Transaction const &tx, Address const &sender)
         return SystemTransactionError::MissingTo;
     }
 
-    if (MONAD_UNLIKELY(tx.to != staking::STAKING_CA)) {
+    // Meritium: allow system transactions to Agent reward (0x1001),
+    // audit (0x1002), and verification (0x1003) contracts.
+    if (MONAD_UNLIKELY(tx.to != staking::STAKING_CA
+        && tx.to != Address{0x1001}
+        && tx.to != Address{0x1002}
+        && tx.to != Address{0x1003})) {
         return SystemTransactionError::InvalidSystemContract;
     }
 

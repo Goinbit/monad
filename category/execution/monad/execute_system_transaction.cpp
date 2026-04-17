@@ -183,7 +183,18 @@ Result<void> ExecuteSystemTransaction<traits>::execute(State &state)
 
     state.push();
     call_tracer_.on_enter(to_message());
-    BOOST_OUTCOME_TRY(execute_staking_syscall(state, tx_.data, tx_.value));
+
+    // Meritium: Agent system contracts (0x1001-0x1003) are pass-through —
+    // value transfer is handled by the state layer; the calldata is logged
+    // but not executed by the C++ EVM (the Rust consensus layer already
+    // validated the oracle entries). Only route to staking for 0x1000.
+    if (*tx_.to == staking::STAKING_CA) {
+        BOOST_OUTCOME_TRY(execute_staking_syscall(state, tx_.data, tx_.value));
+    } else {
+        // Meritium oracle system tx: credit the contract address with value
+        state.add_to_balance(*tx_.to, tx_.value);
+    }
+
     call_tracer_.on_exit(evmc::Result{EVMC_SUCCESS});
     state.pop_accept();
 
