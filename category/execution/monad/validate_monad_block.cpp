@@ -88,24 +88,21 @@ Result<void> static_validate_monad_body(
         txns.begin() + std::distance(senders.begin(), first_user_sender);
     auto const is_reward = [](Transaction const &tx) { return tx.value > 0; };
 
-    // Find first reward txn.
-    auto const first_reward_txn =
-        std::find_if(txns.begin(), end_system_txn, is_reward);
-    if (MONAD_UNLIKELY(first_reward_txn == end_system_txn)) {
-        return outcome::success();
-    }
-
-    // No other reward txn should come after it.
-    auto const another_reward =
-        std::find_if(std::next(first_reward_txn), end_system_txn, is_reward);
-    if (MONAD_UNLIKELY(another_reward != end_system_txn)) {
-        return MonadBlockError::MultipleRewardTransactions;
-    }
-
-    // Reward should not exceed 25 MON.
+    // Meritium Phase A: allow multiple reward system transactions per block.
+    // PoAW distributes the per-block reward across multiple recipients
+    // (5 founder Agent wallets + protocol sustainability fund), so the
+    // validator sums all reward values and enforces a cumulative upper
+    // bound rather than the upstream Monad single-tx cap. The sum check
+    // keeps the original inflation guarantee intact.
     constexpr uint256_t MAXIMUM_BLOCK_REWARD = 25 * staking::MON;
-    if (MONAD_UNLIKELY(first_reward_txn->value > MAXIMUM_BLOCK_REWARD)) {
-        return MonadBlockError::InvalidRewardValue;
+    uint256_t total_reward = 0;
+    for (auto it = txns.begin(); it != end_system_txn; ++it) {
+        if (is_reward(*it)) {
+            total_reward += it->value;
+            if (MONAD_UNLIKELY(total_reward > MAXIMUM_BLOCK_REWARD)) {
+                return MonadBlockError::InvalidRewardValue;
+            }
+        }
     }
 
     return outcome::success();
