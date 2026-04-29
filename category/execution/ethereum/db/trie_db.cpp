@@ -27,6 +27,7 @@
 #include <category/execution/ethereum/core/fmt/int_fmt.hpp> // NOLINT
 #include <category/execution/ethereum/core/receipt.hpp>
 #include <category/execution/ethereum/core/rlp/address_rlp.hpp>
+#include <category/execution/ethereum/core/rlp/agent_record_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/block_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/bytes_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/int_rlp.hpp>
@@ -325,6 +326,114 @@ BlockHeader TrieDb::read_eth_header()
         "FATAL: Could not decode eth header : %s",
         decode_res.error().message().c_str());
     return std::move(decode_res.value());
+}
+
+std::optional<meritium::AgentRecord>
+TrieDb::read_agent_record(bytes32_t const &agent_id)
+{
+    // Query the AGENT_NIBBLE subtrie keyed by agent_id (32 bytes).
+    auto const id_view = byte_string_view{agent_id.bytes, 32};
+    auto const query_res = db_.find(
+        curr_root_,
+        concat(prefix_, AGENT_NIBBLE, mpt::NibblesView{id_view}),
+        block_number_);
+    if (query_res.has_error()) {
+        return std::nullopt;
+    }
+    auto encoded = query_res.value().node->value();
+    auto decode_res = rlp::decode_agent_record(encoded);
+    if (decode_res.has_error()) {
+        return std::nullopt;
+    }
+    return decode_res.value();
+}
+
+std::map<bytes32_t, meritium::AgentRecord> TrieDb::enumerate_agents()
+{
+    std::map<bytes32_t, meritium::AgentRecord> out;
+
+    auto res_cursor =
+        db_.find(curr_root_, concat(prefix_, AGENT_NIBBLE), block_number_);
+    if (!res_cursor.has_value() || !res_cursor.value().is_valid()) {
+        return out;
+    }
+
+    struct AgentTraverse final : public mpt::TraverseMachine
+    {
+        std::map<bytes32_t, meritium::AgentRecord> &sink;
+        mpt::Nibbles path{};
+
+        explicit AgentTraverse(
+            std::map<bytes32_t, meritium::AgentRecord> &sink)
+            : sink(sink)
+        {
+        }
+
+        virtual bool
+        down(unsigned char const branch, mpt::Node const &node) override
+        {
+            if (branch == mpt::INVALID_BRANCH) {
+                MONAD_ASSERT(node.path_nibble_view().nibble_size() == 0);
+                return true;
+            }
+            path = concat(
+                mpt::NibblesView{path}, branch, node.path_nibble_view());
+
+            // Agent record leaves sit at path length 64 nibbles (= 32 bytes,
+            // the agent_id) below the AGENT_NIBBLE cursor.
+            if (path.nibble_size() == (sizeof(bytes32_t) * 2) &&
+                node.has_value()) {
+                auto encoded = node.value();
+                auto decoded = rlp::decode_agent_record(encoded);
+                if (decoded.has_value()) {
+                    auto record = std::move(decoded.value());
+                    sink.emplace(record.agent_id, std::move(record));
+                }
+            }
+            return true;
+        }
+
+        virtual void
+        up(unsigned char const branch, mpt::Node const &node) override
+        {
+            auto const path_view = mpt::NibblesView{path};
+            auto const rem_size = [&] {
+                if (branch == mpt::INVALID_BRANCH) {
+                    MONAD_ASSERT(path_view.nibble_size() == 0);
+                    return 0;
+                }
+                int const rem_size = path_view.nibble_size() - 1 -
+                                     node.path_nibble_view().nibble_size();
+                MONAD_ASSERT(rem_size >= 0);
+                return rem_size;
+            }();
+            path = path_view.substr(0, static_cast<unsigned>(rem_size));
+        }
+
+        virtual std::unique_ptr<mpt::TraverseMachine> clone() const override
+        {
+            return std::make_unique<AgentTraverse>(*this);
+        }
+    };
+
+    AgentTraverse traverse(out);
+    // Mirror the mode selection used by to_json(): RWOnDisk requires
+    // blocking traversal to avoid re-entering the triedb I/O fiber.
+    if (db_.is_on_disk() && !db_.is_read_only()) {
+        MONAD_ASSERT(
+            db_.traverse_blocking(res_cursor.value(), traverse, block_number_));
+    }
+    else {
+        MONAD_ASSERT(db_.traverse(
+            res_cursor.value(), traverse, block_number_, /*limit*/ 4096));
+    }
+
+    return out;
+}
+
+bytes32_t TrieDb::agent_state_root()
+{
+    return merkle_root(agent_nibbles);
 }
 
 std::string TrieDb::print_stats()

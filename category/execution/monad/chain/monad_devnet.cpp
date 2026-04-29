@@ -29,7 +29,7 @@ monad_revision MonadDevnet::get_monad_revision(uint64_t /*timestamp*/) const
 
 uint256_t MonadDevnet::get_chain_id() const
 {
-    return 20143;
+    return MERITIUM_DEVNET_CHAIN_ID;
 };
 
 GenesisState MonadDevnet::get_genesis_state() const

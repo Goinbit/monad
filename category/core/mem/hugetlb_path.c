@@ -18,6 +18,7 @@
 #include <category/core/mem/hugetlb_path.h>
 #include <category/core/path_util.h>
 #include <category/core/srcloc.h>
+#include <category/core/strlcpy_compat.h>
 
 #include <hugetlbfs.h>
 
@@ -75,7 +76,7 @@ int monad_hugetlbfs_open_dir_fd(
             ENODEV, "no mounted hugetlbfs is accessible to this user");
     }
     size_t const mount_path_len =
-        strlcpy(pathbuf, hugetlbfs_mount_path, pathbuf_size);
+        monad_strlcpy(pathbuf, hugetlbfs_mount_path, pathbuf_size);
     if (mount_path_len >= pathbuf_size) {
         return FORMAT_ERRC(
             ENAMETOOLONG, "pathbuf cannot hold %s", hugetlbfs_mount_path);

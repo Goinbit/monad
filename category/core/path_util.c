@@ -24,6 +24,7 @@
 
 #include <category/core/cleanup.h> // NOLINT(misc-include-cleaner)
 #include <category/core/path_util.h>
+#include <category/core/strlcpy_compat.h>
 
 // Silence clang-tidy complaining about trying to close AT_FDCWD
 static void tidy_close(int fd)
@@ -50,7 +51,7 @@ int monad_path_append(char **dst, char const *src, size_t *size)
     **dst = '/';
     *dst += 1;
     *size -= 1;
-    size_t const n = strlcpy(*dst, src, *size);
+    size_t const n = monad_strlcpy(*dst, src, *size);
     if (n >= *size) {
         *dst += *size;
         *size = 0;

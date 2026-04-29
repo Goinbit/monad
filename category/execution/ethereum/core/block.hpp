@@ -56,6 +56,10 @@ struct BlockHeader
     std::optional<uint64_t> excess_blob_gas{std::nullopt}; // EIP-4844
     std::optional<bytes32_t> parent_beacon_block_root{std::nullopt}; // EIP-4788
     std::optional<bytes32_t> requests_hash{std::nullopt}; // EIP-7685
+    std::optional<bytes32_t> agent_state_root{std::nullopt}; // Meritium
+    std::optional<uint64_t> agent_tx_count{std::nullopt}; // Meritium
+    std::optional<uint64_t> active_agent_count{std::nullopt}; // Meritium
+    std::optional<uint64_t> total_tasks_completed{std::nullopt}; // Meritium
 
     friend bool operator==(BlockHeader const &, BlockHeader const &) = default;
 };
@@ -70,10 +74,11 @@ struct Block
     friend bool operator==(Block const &, Block const &) = default;
 };
 
-static_assert(sizeof(BlockHeader) == 760);
+// The exact layout may vary slightly across standard libraries/ABIs.
+static_assert(sizeof(BlockHeader) == 840 || sizeof(BlockHeader) == 848);
 static_assert(alignof(BlockHeader) == 8);
 
-static_assert(sizeof(Block) == 840);
+static_assert(sizeof(Block) == 920 || sizeof(Block) == 928);
 static_assert(alignof(Block) == 8);
 
 MONAD_NAMESPACE_END

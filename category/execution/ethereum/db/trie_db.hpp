@@ -80,6 +80,25 @@ public:
         uint64_t block_number, bytes32_t const &block_id) override;
 
     virtual BlockHeader read_eth_header() override;
+
+    // Meritium (M5): read the Agent record for `agent_id` from the Agent
+    // state partition (AGENT_NIBBLE). Returns std::nullopt if the agent is
+    // not registered. Non-virtual because this method is a Meritium-specific
+    // extension not present on the base ::monad::Db interface.
+    std::optional<meritium::AgentRecord>
+    read_agent_record(bytes32_t const &agent_id);
+
+    // Meritium (M5 Part 3): enumerate every AgentRecord stored under the
+    // AGENT_NIBBLE subtree. Walks the MPT and decodes each leaf. Used once
+    // at node startup to warm the in-memory AgentStateTable cache.
+    // Returns an empty map if the partition is empty.
+    std::map<bytes32_t, meritium::AgentRecord> enumerate_agents();
+
+    // Meritium (M5 Part 3): root hash of the AGENT_NIBBLE subtree, analogous
+    // to state_root() for the main state partition. This is what goes into
+    // BlockHeader.agent_state_root.
+    bytes32_t agent_state_root();
+
     virtual bytes32_t state_root() override;
     virtual bytes32_t receipts_root() override;
     virtual bytes32_t transactions_root() override;

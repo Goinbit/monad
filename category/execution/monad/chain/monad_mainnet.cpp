@@ -47,7 +47,7 @@ monad_revision MonadMainnet::get_monad_revision(uint64_t const timestamp) const
 
 uint256_t MonadMainnet::get_chain_id() const
 {
-    return 143;
+    return MERITIUM_MAINNET_CHAIN_ID;
 }
 
 GenesisState MonadMainnet::get_genesis_state() const

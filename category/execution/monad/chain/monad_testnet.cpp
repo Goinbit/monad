@@ -57,7 +57,7 @@ monad_revision MonadTestnet::get_monad_revision(uint64_t const timestamp) const
 
 uint256_t MonadTestnet::get_chain_id() const
 {
-    return 10143;
+    return MERITIUM_TESTNET_CHAIN_ID;
 };
 
 GenesisState MonadTestnet::get_genesis_state() const

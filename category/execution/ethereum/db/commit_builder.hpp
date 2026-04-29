@@ -18,10 +18,12 @@
 #include <category/core/byte_string.hpp>
 #include <category/core/bytes.hpp>
 #include <category/core/config.hpp>
+#include <category/execution/ethereum/agent_state.hpp>
 #include <category/execution/ethereum/state2/state_deltas.hpp>
 #include <category/mpt/update.hpp>
 
 #include <deque>
+#include <map>
 #include <vector>
 
 MONAD_NAMESPACE_BEGIN
@@ -59,6 +61,13 @@ public:
     CommitBuilder &add_withdrawals(std::vector<Withdrawal> const &);
 
     CommitBuilder &add_block_header(BlockHeader const &);
+
+    // Meritium (M5): persist the Agent state partition under AGENT_NIBBLE.
+    // Each record is RLP-encoded (see rlp::encode_agent_record) and written
+    // with agent_id as the 32-byte key. Passing an empty map still installs
+    // the empty subtrie (for determinism on chains with no agents yet).
+    CommitBuilder &add_agent_state(
+        std::map<bytes32_t, meritium::AgentRecord> const &agents);
 
     // Consumes updates_ but preserves the backing deque storage. New updates
     // can be added after a build() call (e.g. add_block_header between the

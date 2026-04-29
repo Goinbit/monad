@@ -66,6 +66,7 @@ struct MachineBase : public mpt::StateMachine
         TxHash,
         BlockHash,
         CallFrame,
+        Agent, // Meritium AGENT_NIBBLE = 10
     };
 
     uint8_t depth{0};
@@ -115,6 +116,7 @@ inline constexpr unsigned char OMMER_NIBBLE = 6;
 inline constexpr unsigned char TX_HASH_NIBBLE = 7;
 inline constexpr unsigned char BLOCK_HASH_NIBBLE = 8;
 inline constexpr unsigned char CALL_FRAME_NIBBLE = 9;
+inline constexpr unsigned char AGENT_NIBBLE = 10; // Meritium Agent state partition (M5)
 inline constexpr unsigned char INVALID_NIBBLE = 255;
 inline mpt::Nibbles const state_nibbles = mpt::concat(STATE_NIBBLE);
 inline mpt::Nibbles const code_nibbles = mpt::concat(CODE_NIBBLE);
@@ -127,6 +129,8 @@ inline mpt::Nibbles const ommer_nibbles = mpt::concat(OMMER_NIBBLE);
 inline mpt::Nibbles const withdrawal_nibbles = mpt::concat(WITHDRAWAL_NIBBLE);
 inline mpt::Nibbles const tx_hash_nibbles = mpt::concat(TX_HASH_NIBBLE);
 inline mpt::Nibbles const block_hash_nibbles = mpt::concat(BLOCK_HASH_NIBBLE);
+// Meritium Agent state partition — stores Agent records keyed by agent_id.
+inline mpt::Nibbles const agent_nibbles = mpt::concat(AGENT_NIBBLE);
 
 //////////////////////////////////////////////////////////
 // Proposed and finialized subtries. Active on all tables.

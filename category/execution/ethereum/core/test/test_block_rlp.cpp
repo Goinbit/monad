@@ -1063,3 +1063,55 @@ TEST(Rlp_block, IntTypeMismatchRegression)
     ASSERT_FALSE(decoded_block_header.has_error());
     EXPECT_EQ(decoded_block_header.value(), block_header);
 }
+
+TEST(Rlp_block, AgentHeaderExtensionRoundtripAgentOnly)
+{
+    auto const block_header = BlockHeader{
+        .base_fee_per_gas = 100,
+        .withdrawals_root =
+            0x1111111111111111111111111111111111111111111111111111111111111111_bytes32,
+        .blob_gas_used = 2,
+        .excess_blob_gas = 3,
+        .parent_beacon_block_root =
+            0x2222222222222222222222222222222222222222222222222222222222222222_bytes32,
+        .agent_state_root =
+            0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_bytes32,
+        .agent_tx_count = 9,
+        .active_agent_count = 7,
+        .total_tasks_completed = 42,
+    };
+
+    auto const encoded_block_header = rlp::encode_block_header(block_header);
+    byte_string_view encoded_block_header_view{encoded_block_header};
+    auto const decoded_block_header =
+        rlp::decode_block_header(encoded_block_header_view);
+    ASSERT_FALSE(decoded_block_header.has_error());
+    EXPECT_EQ(decoded_block_header.value(), block_header);
+}
+
+TEST(Rlp_block, AgentHeaderExtensionRoundtripWithRequestsHash)
+{
+    auto const block_header = BlockHeader{
+        .base_fee_per_gas = 200,
+        .withdrawals_root =
+            0x3333333333333333333333333333333333333333333333333333333333333333_bytes32,
+        .blob_gas_used = 4,
+        .excess_blob_gas = 5,
+        .parent_beacon_block_root =
+            0x4444444444444444444444444444444444444444444444444444444444444444_bytes32,
+        .requests_hash =
+            0x5555555555555555555555555555555555555555555555555555555555555555_bytes32,
+        .agent_state_root =
+            0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_bytes32,
+        .agent_tx_count = 10,
+        .active_agent_count = 8,
+        .total_tasks_completed = 64,
+    };
+
+    auto const encoded_block_header = rlp::encode_block_header(block_header);
+    byte_string_view encoded_block_header_view{encoded_block_header};
+    auto const decoded_block_header =
+        rlp::decode_block_header(encoded_block_header_view);
+    ASSERT_FALSE(decoded_block_header.has_error());
+    EXPECT_EQ(decoded_block_header.value(), block_header);
+}

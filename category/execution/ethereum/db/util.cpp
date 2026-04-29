@@ -511,6 +511,13 @@ mpt::Compute &MachineBase::get_compute() const
         return depth == prefix_length ? generic_root_merkle_compute
                                       : generic_merkle_compute;
     }
+    else if (table == TableType::Agent) {
+        // Meritium (M5 Part 3): Agent subtree. 32-byte fixed-length keys
+        // (agent_id), RLP-encoded variable-length values (AgentRecord).
+        // Same compute pair as Withdrawal — generic variable-length merkle.
+        return depth == prefix_length ? generic_root_merkle_compute
+                                      : generic_merkle_compute;
+    }
     else {
         return empty_compute;
     }
@@ -543,8 +550,9 @@ void MachineBase::down(unsigned char const nibble)
     MONAD_ASSERT(depth <= max_depth(prefix_length));
     if (MONAD_UNLIKELY(depth == prefix_length)) {
         MONAD_ASSERT(table == TableType::Prefix);
+        // Meritium: AGENT_NIBBLE (10) is the highest valid table nibble.
         MONAD_ASSERT_PRINTF(
-            nibble <= CALL_FRAME_NIBBLE,
+            nibble <= AGENT_NIBBLE,
             "Invalid nibble %u",
             static_cast<unsigned>(nibble));
         table = static_cast<TableType>(nibble + 1);

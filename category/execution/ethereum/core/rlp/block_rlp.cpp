@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <category/core/byte_string.hpp>
+#include <category/core/assert.h>
 #include <category/core/int.hpp>
 #include <category/core/likely.h>
 #include <category/core/result.hpp>
@@ -36,6 +37,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -87,6 +89,25 @@ byte_string encode_block_header(BlockHeader const &block_header)
     if (block_header.requests_hash.has_value()) {
         encoded_block_header +=
             encode_bytes32(block_header.requests_hash.value());
+    }
+    bool const has_agent_extension =
+        block_header.agent_state_root.has_value() ||
+        block_header.agent_tx_count.has_value() ||
+        block_header.active_agent_count.has_value() ||
+        block_header.total_tasks_completed.has_value();
+    if (has_agent_extension) {
+        MONAD_ASSERT(block_header.agent_state_root.has_value());
+        MONAD_ASSERT(block_header.agent_tx_count.has_value());
+        MONAD_ASSERT(block_header.active_agent_count.has_value());
+        MONAD_ASSERT(block_header.total_tasks_completed.has_value());
+        encoded_block_header +=
+            encode_bytes32(block_header.agent_state_root.value());
+        encoded_block_header +=
+            encode_unsigned(block_header.agent_tx_count.value());
+        encoded_block_header +=
+            encode_unsigned(block_header.active_agent_count.value());
+        encoded_block_header +=
+            encode_unsigned(block_header.total_tasks_completed.value());
     }
 
     return encode_list2(encoded_block_header);
@@ -182,8 +203,75 @@ Result<BlockHeader> decode_block_header(byte_string_view &enc)
                     decode_bytes32(payload));
 
                 if (payload.size() > 0) {
-                    BOOST_OUTCOME_TRY(
-                        block_header.requests_hash, decode_bytes32(payload));
+                    // Four tail shapes are allowed (mirrors Rust
+                    // ProposedEthHeader in monad-eth-types):
+                    //   (a) requests_hash only        (EIP-7685)
+                    //   (b) agent 4 fields only       (Meritium without Prague)
+                    //   (c) requests_hash + agent 4   (Meritium on Prague)
+                    //   (d) no tail                   (already ruled out above)
+                    //
+                    // The first item is always a bytes32 (either requests_hash
+                    // or agent_state_root). Disambiguate by length-based
+                    // speculation, not fixed magic byte counts.
+
+                    bytes32_t first_hash;
+                    BOOST_OUTCOME_TRY(first_hash, decode_bytes32(payload));
+
+                    if (payload.size() == 0) {
+                        // (a) requests_hash only
+                        block_header.requests_hash = first_hash;
+                    }
+                    else {
+                        // Speculate (b): first_hash is agent_state_root and
+                        // three uint64s follow that consume all remaining
+                        // bytes exactly.
+                        byte_string_view try_agent_only = payload;
+                        auto const agent_only = [&]() -> Result<std::tuple<
+                                                           uint64_t,
+                                                           uint64_t,
+                                                           uint64_t>> {
+                            BOOST_OUTCOME_TRY(
+                                auto const tx_count,
+                                decode_unsigned<uint64_t>(try_agent_only));
+                            BOOST_OUTCOME_TRY(
+                                auto const active,
+                                decode_unsigned<uint64_t>(try_agent_only));
+                            BOOST_OUTCOME_TRY(
+                                auto const tasks,
+                                decode_unsigned<uint64_t>(try_agent_only));
+                            return std::make_tuple(tx_count, active, tasks);
+                        }();
+
+                        if (agent_only.has_value() &&
+                            try_agent_only.size() == 0) {
+                            auto const [tx_count, active, tasks] =
+                                agent_only.value();
+                            block_header.agent_state_root = first_hash;
+                            block_header.agent_tx_count = tx_count;
+                            block_header.active_agent_count = active;
+                            block_header.total_tasks_completed = tasks;
+                            payload = try_agent_only; // commit consumption
+                        }
+                        else {
+                            // (c) requests_hash + agent 4 fields
+                            block_header.requests_hash = first_hash;
+                            BOOST_OUTCOME_TRY(
+                                block_header.agent_state_root,
+                                decode_bytes32(payload));
+                            BOOST_OUTCOME_TRY(
+                                block_header.agent_tx_count,
+                                decode_unsigned<uint64_t>(payload));
+                            BOOST_OUTCOME_TRY(
+                                block_header.active_agent_count,
+                                decode_unsigned<uint64_t>(payload));
+                            BOOST_OUTCOME_TRY(
+                                block_header.total_tasks_completed,
+                                decode_unsigned<uint64_t>(payload));
+                            if (payload.size() != 0) {
+                                return DecodeError::InputTooLong;
+                            }
+                        }
+                    }
                 }
             }
         }

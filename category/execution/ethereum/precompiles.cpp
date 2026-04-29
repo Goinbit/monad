@@ -19,6 +19,7 @@
 #include <category/core/likely.h>
 #include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/precompiles.hpp>
+#include <category/execution/ethereum/precompiles_agent.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
 #include <category/vm/evm/explicit_traits.hpp>
 #include <silkpre/precompile.h>
@@ -107,6 +108,12 @@ std::optional<PrecompiledContract> resolve_precompile(Address const &address)
     if constexpr (traits::eip_7951_active()) {
         CASE(0x0100, p256_verify_gas_cost, p256_verify_execute);
     }
+
+    // Meritium Agent precompile (M4).
+    // Deployed at 0x0101 because Monad's PRAGUE already occupies 0x0b-0x11
+    // (BLS12-381) and 0x0100 (P256_VERIFY / EIP-7951). Always active —
+    // Agent identity lookup is a Meritium-native feature, not a hard fork.
+    CASE(0x0101, meritium::agent_gas_cost, meritium::agent_execute);
 
 #undef CASE
 

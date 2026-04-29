@@ -23,6 +23,8 @@
 #include <category/execution/ethereum/rlp/decode_error.hpp>
 #include <category/execution/monad/core/rlp/monad_block_rlp.hpp>
 
+#include <tuple>
+
 #include <vector>
 
 MONAD_RLP_ANONYMOUS_NAMESPACE_BEGIN
@@ -50,12 +52,68 @@ Result<BlockHeader> decode_execution_inputs(byte_string_view &enc)
         header.excess_blob_gas, decode_unsigned<uint64_t>(payload));
     BOOST_OUTCOME_TRY(header.parent_beacon_block_root, decode_bytes32(payload));
 
-    // TODO: This backwards-compatible logic should be temporary. When explicit
-    // versioning is added to this module, the following field needs to be
-    // parsed only if we're in a revision where EVMC_PRAGUE is active
-    // (MONAD_FOUR and onwards).
     if (payload.size() > 0) {
-        BOOST_OUTCOME_TRY(header.requests_hash, decode_bytes32(payload));
+        // Backward/forward compatibility. Four tail shapes are allowed
+        // (mirrors Rust ProposedEthHeader in monad-eth-types):
+        //   (a) requests_hash only        (legacy EIP-7685)
+        //   (b) agent 4 fields only       (Meritium on non-Prague chain)
+        //   (c) requests_hash + agent 4   (Meritium on Prague)
+        //
+        // The first tail item is always a bytes32 (either requests_hash or
+        // agent_state_root); disambiguate by speculative decoding — checking
+        // whether remaining bytes fit the agent-only layout exactly.
+
+        bytes32_t first_hash;
+        BOOST_OUTCOME_TRY(first_hash, decode_bytes32(payload));
+
+        if (payload.size() == 0) {
+            // (a) requests_hash only
+            header.requests_hash = first_hash;
+        }
+        else {
+            // Speculate (b): first_hash is agent_state_root; three uint64s
+            // follow and consume all remaining bytes exactly.
+            byte_string_view try_agent_only = payload;
+            auto const agent_only =
+                [&]() -> Result<std::tuple<uint64_t, uint64_t, uint64_t>> {
+                BOOST_OUTCOME_TRY(
+                    auto const tx_count,
+                    decode_unsigned<uint64_t>(try_agent_only));
+                BOOST_OUTCOME_TRY(
+                    auto const active,
+                    decode_unsigned<uint64_t>(try_agent_only));
+                BOOST_OUTCOME_TRY(
+                    auto const tasks,
+                    decode_unsigned<uint64_t>(try_agent_only));
+                return std::make_tuple(tx_count, active, tasks);
+            }();
+
+            if (agent_only.has_value() && try_agent_only.size() == 0) {
+                auto const [tx_count, active, tasks] = agent_only.value();
+                header.agent_state_root = first_hash;
+                header.agent_tx_count = tx_count;
+                header.active_agent_count = active;
+                header.total_tasks_completed = tasks;
+                payload = try_agent_only; // commit
+            }
+            else {
+                // (c) requests_hash + agent 4 fields
+                header.requests_hash = first_hash;
+                BOOST_OUTCOME_TRY(
+                    header.agent_state_root, decode_bytes32(payload));
+                BOOST_OUTCOME_TRY(
+                    header.agent_tx_count, decode_unsigned<uint64_t>(payload));
+                BOOST_OUTCOME_TRY(
+                    header.active_agent_count,
+                    decode_unsigned<uint64_t>(payload));
+                BOOST_OUTCOME_TRY(
+                    header.total_tasks_completed,
+                    decode_unsigned<uint64_t>(payload));
+                if (payload.size() != 0) {
+                    return DecodeError::InputTooLong;
+                }
+            }
+        }
     }
 
     if (MONAD_UNLIKELY(!payload.empty())) {

@@ -59,6 +59,13 @@ TYPED_TEST(MonadTraitsTest, compute_gas_refund)
     }
 }
 
+TEST(MonadChain, MeritiumChainIds)
+{
+    EXPECT_EQ(MonadMainnet{}.get_chain_id(), MERITIUM_MAINNET_CHAIN_ID);
+    EXPECT_EQ(MonadTestnet{}.get_chain_id(), MERITIUM_TESTNET_CHAIN_ID);
+    EXPECT_EQ(MonadDevnet{}.get_chain_id(), MERITIUM_DEVNET_CHAIN_ID);
+}
+
 TYPED_TEST(TraitsTest, Genesis)
 {
     {

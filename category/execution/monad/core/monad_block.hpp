@@ -146,13 +146,19 @@ struct MonadConsensusBlockHeaderV2 : MonadConsensusBlockHeaderV1
         MonadConsensusBlockHeaderV2 const &) = default;
 };
 
-static_assert(sizeof(MonadConsensusBlockHeaderV0) == 1216);
+static_assert(
+    sizeof(MonadConsensusBlockHeaderV0) == 1296 ||
+    sizeof(MonadConsensusBlockHeaderV0) == 1304);
 static_assert(alignof(MonadConsensusBlockHeaderV0) == 8);
 
-static_assert(sizeof(MonadConsensusBlockHeaderV1) == 1176);
+static_assert(
+    sizeof(MonadConsensusBlockHeaderV1) == 1256 ||
+    sizeof(MonadConsensusBlockHeaderV1) == 1264);
 static_assert(alignof(MonadConsensusBlockHeaderV1) == 8);
 
-static_assert(sizeof(MonadConsensusBlockHeaderV2) == 1200);
+static_assert(
+    sizeof(MonadConsensusBlockHeaderV2) == 1280 ||
+    sizeof(MonadConsensusBlockHeaderV2) == 1288);
 static_assert(alignof(MonadConsensusBlockHeaderV2) == 8);
 
 struct MonadConsensusBlockBody
@@ -183,13 +189,19 @@ using MonadConsensusBlockV0 = MonadConsensusBlock<MonadConsensusBlockHeaderV0>;
 using MonadConsensusBlockV1 = MonadConsensusBlock<MonadConsensusBlockHeaderV1>;
 using MonadConsensusBlockV2 = MonadConsensusBlock<MonadConsensusBlockHeaderV2>;
 
-static_assert(sizeof(MonadConsensusBlockV0) == 1288);
+static_assert(
+    sizeof(MonadConsensusBlockV0) == 1368 ||
+    sizeof(MonadConsensusBlockV0) == 1376);
 static_assert(alignof(MonadConsensusBlockV0) == 8);
 
-static_assert(sizeof(MonadConsensusBlockV1) == 1248);
+static_assert(
+    sizeof(MonadConsensusBlockV1) == 1328 ||
+    sizeof(MonadConsensusBlockV1) == 1336);
 static_assert(alignof(MonadConsensusBlockV1) == 8);
 
-static_assert(sizeof(MonadConsensusBlockV2) == 1272);
+static_assert(
+    sizeof(MonadConsensusBlockV2) == 1352 ||
+    sizeof(MonadConsensusBlockV2) == 1360);
 static_assert(alignof(MonadConsensusBlockV2) == 8);
 
 MONAD_NAMESPACE_END

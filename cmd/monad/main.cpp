@@ -117,6 +117,11 @@ try {
     cxx_runtime_terminate_handler = std::get_terminate();
     std::set_terminate(backtrace_terminate_handler);
 
+    // Install signal handlers early so that long-running initialization
+    // (WAL recovery, triedb load) is interruptible via SIGTERM/SIGINT
+    signal(SIGTERM, signal_handler);
+    signal(SIGINT, signal_handler);
+
     CLI::App cli{"monad"};
     cli.option_defaults()->always_capture_default();
 
@@ -392,11 +397,6 @@ try {
             block_db, start_block_num, block_hash_buffer));
     }
 
-    if (isatty(STDIN_FILENO)) {
-        // When stdin is connected to a terminal, we're running interactively
-        signal(SIGINT, signal_handler);
-    }
-    signal(SIGTERM, signal_handler);
     stop = 0;
 
     uint64_t block_num = start_block_num;

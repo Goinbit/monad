@@ -20,6 +20,7 @@
 #include <category/execution/ethereum/core/block.hpp>
 #include <category/execution/ethereum/core/receipt.hpp>
 #include <category/execution/ethereum/core/rlp/address_rlp.hpp>
+#include <category/execution/ethereum/core/rlp/agent_record_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/block_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/int_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/receipt_rlp.hpp>
@@ -331,6 +332,35 @@ CommitBuilder &CommitBuilder::add_block_header(BlockHeader const &header)
         .value = byte_string_view{},
         .incarnation = false,
         .next = std::move(block_hash_nested_updates),
+        .version = static_cast<int64_t>(block_number_)}));
+
+    return *this;
+}
+
+CommitBuilder &CommitBuilder::add_agent_state(
+    std::map<bytes32_t, meritium::AgentRecord> const &agents)
+{
+    // Build the subtrie of agent records keyed by agent_id.
+    // Each value is rlp::encode_agent_record(record).
+    UpdateList agent_updates;
+    for (auto const &[id, record] : agents) {
+        auto const &id_bytes =
+            bytes_alloc_.emplace_back(id.bytes, id.bytes + 32);
+        agent_updates.push_front(update_alloc_.emplace_back(Update{
+            .key = NibblesView{id_bytes},
+            .value =
+                bytes_alloc_.emplace_back(rlp::encode_agent_record(record)),
+            .incarnation = false,
+            .next = UpdateList{},
+            .version = static_cast<int64_t>(block_number_)}));
+    }
+
+    // Install (or clear) the top-level AGENT_NIBBLE subtrie.
+    updates_.push_front(update_alloc_.emplace_back(Update{
+        .key = agent_nibbles,
+        .value = byte_string_view{},
+        .incarnation = true,
+        .next = std::move(agent_updates),
         .version = static_cast<int64_t>(block_number_)}));
 
     return *this;
