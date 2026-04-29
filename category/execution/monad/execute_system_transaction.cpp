@@ -19,6 +19,7 @@
 #include <category/execution/ethereum/chain/chain.hpp>
 #include <category/execution/ethereum/core/contract/abi_signatures.hpp>
 #include <category/execution/ethereum/core/transaction.hpp>
+#include <category/execution/ethereum/agent_state.hpp>
 #include <category/execution/ethereum/event/record_txn_events.hpp>
 #include <category/execution/ethereum/metrics/block_metrics.hpp>
 #include <category/execution/ethereum/state2/block_state.hpp>
@@ -200,6 +201,30 @@ Result<void> ExecuteSystemTransaction<traits>::execute(State &state)
                     tx_.data.data() + 4 + 12, // skip selector(4) + padding(12)
                     20);
         state.add_to_balance(agent_wallet, tx_.value);
+    } else if (*tx_.to == Address{0x1004} && tx_.data.size() >= 132) {
+        // AgentRegistrationCall (0x1004): register or update an Agent in the
+        // AgentStateTable. Calldata (all ABI-encoded, 4+32+32+32+32 = 132 min):
+        //   bytes 0-3:   selector
+        //   bytes 4-35:  agent_id (bytes32)
+        //   bytes 36-67: wallet (address in last 20 bytes)
+        //   bytes 68-99: tier (uint8 in last byte)
+        //   bytes 100-131: reputation (uint16 in last 2 bytes)
+        auto const *const cd = tx_.data.data();
+        bytes32_t agent_id;
+        std::memcpy(agent_id.bytes, cd + 4, 32);
+        Address wallet;
+        std::memcpy(wallet.bytes, cd + 36 + 12, 20);
+        auto const tier_raw = static_cast<uint8_t>(cd[99]);
+        auto const tier = tier_raw <= 4
+            ? static_cast<meritium::AgentTier>(tier_raw)
+            : meritium::AgentTier::Unregistered;
+        // reputation (uint16) is right-aligned in its 32-byte ABI word
+        // at offset 100, so the value occupies the last 2 bytes (130-131).
+        uint16_t reputation = static_cast<uint16_t>(cd[130]) << 8 |
+                              static_cast<uint16_t>(cd[131]);
+        meritium::AgentStateTable::instance().register_agent(
+            agent_id, wallet, tier, reputation);
+        state.add_to_balance(*tx_.to, 0);
     } else {
         // 0x1002/0x1003: audit/verification — no value, just accept
         state.add_to_balance(*tx_.to, 0);

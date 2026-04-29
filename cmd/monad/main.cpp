@@ -347,6 +347,11 @@ try {
         return triedb.get_block_number();
     }();
 
+    // Meritium: warm AgentStateTable cache from persistent MPT storage.
+    // On fresh genesis (init_block_num == 0) this is a no-op; on restart the
+    // previously-persisted AGENT_NIBBLE subtree is loaded into memory.
+    meritium::AgentStateTable::instance().warm_from_triedb(triedb);
+
     std::unique_ptr<monad::StateSyncServer> sync_server;
     if (!statesync.empty()) {
         sync_server = monad::make_statesync_server(monad::StateSyncServerConfig{

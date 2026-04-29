@@ -315,6 +315,8 @@ Result<BlockExecOutput> propose_block(
         .add_transactions(block.transactions, senders)
         .add_call_frames(call_frames)
         .add_ommers(block.ommers);
+    // Meritium: persist Agent state partition under AGENT_NIBBLE.
+    meritium::AgentStateTable::instance().export_to_commit(builder);
     if (block.withdrawals.has_value()) {
         builder.add_withdrawals(block.withdrawals.value());
     }
