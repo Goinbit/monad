@@ -40,27 +40,14 @@ using namespace monad;
 
 namespace
 {
-    constexpr auto PRE_ROOT =
-        0x0101010101010101010101010101010101010101010101010101010101010101_bytes32;
-    constexpr auto POST_ROOT =
-        0x0202020202020202020202020202020202020202020202020202020202020202_bytes32;
-
     byte_string make_minimal_witness(
-        bytes32_t const &pre, bytes32_t const &post,
         byte_string nodes_payload = {}, byte_string codes_payload = {})
     {
         return rlp::encode_list2(
             rlp::encode_string2({}), // [0] block_rlp (empty)
-            rlp::encode_string2(
-                byte_string_view{pre.bytes, 32}), // [1] pre_state_root
-            rlp::encode_string2(
-                byte_string_view{post.bytes, 32}), // [2] post_state_root
-            rlp::encode_list2(nodes_payload), // [3] node preimages
-            rlp::encode_list2(codes_payload), // [4] contract bytecodes
-            byte_string{
-                static_cast<unsigned char>(0xc0)}, // [5] preimages (skipped)
-            byte_string{static_cast<unsigned char>(0xc0)}
-            // [6] ancestor headers
+            rlp::encode_list2(nodes_payload), // [1] node preimages
+            rlp::encode_list2(codes_payload), // [2] contract bytecodes
+            byte_string{static_cast<unsigned char>(0xc0)} // [3] headers
         );
     }
 
@@ -151,11 +138,10 @@ namespace
 
 TEST(ParseExecutionWitness, ValidMinimalWitness)
 {
-    auto const w = make_minimal_witness(PRE_ROOT, POST_ROOT);
+    auto const w = make_minimal_witness();
     auto const result = parse_execution_witness(w);
     ASSERT_FALSE(result.has_error());
-    EXPECT_EQ(result.value().pre_state_root, PRE_ROOT);
-    EXPECT_EQ(result.value().post_state_root, POST_ROOT);
+    EXPECT_TRUE(result.value().block_rlp.empty());
     EXPECT_TRUE(result.value().encoded_nodes.empty());
     EXPECT_TRUE(result.value().encoded_codes.empty());
     EXPECT_TRUE(result.value().encoded_headers.empty());
@@ -177,25 +163,8 @@ TEST(ParseExecutionWitness, OuterTypeNotList)
 
 TEST(ParseExecutionWitness, Truncated)
 {
-    auto w = make_minimal_witness(PRE_ROOT, POST_ROOT);
-    w.resize(w.size() - 5);
-    auto const result = parse_execution_witness(w);
-    EXPECT_TRUE(result.has_error());
-}
-
-TEST(ParseExecutionWitness, PreRootWrongLength)
-{
-    // Replace the 32-byte pre_state_root item with a 16-byte one so that
-    // decode_byte_string_fixed<32> returns ArrayLengthUnexpected.
-    byte_string const w = rlp::encode_list2(
-        rlp::encode_string2({}),
-        rlp::encode_string2(
-            byte_string_view{PRE_ROOT.bytes, 16}), // 16 bytes, not 32
-        rlp::encode_string2(byte_string_view{POST_ROOT.bytes, 32}),
-        byte_string{static_cast<unsigned char>(0xc0)},
-        byte_string{static_cast<unsigned char>(0xc0)},
-        byte_string{static_cast<unsigned char>(0xc0)},
-        byte_string{static_cast<unsigned char>(0xc0)});
+    auto w = make_minimal_witness();
+    w.resize(w.size() - 1);
     auto const result = parse_execution_witness(w);
     EXPECT_TRUE(result.has_error());
 }

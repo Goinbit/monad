@@ -1068,14 +1068,20 @@ bool Db::traverse(
         cursor.node, machine, block_id, concurrency_limit);
 }
 
+template <bool UseCustomIterator>
 bool Db::traverse_blocking(
     NodeCursor const &cursor, TraverseMachine &machine, uint64_t const block_id)
 {
     MONAD_ASSERT(impl_);
     MONAD_ASSERT(cursor.is_valid());
-    return preorder_traverse_blocking(
+    return preorder_traverse_blocking<UseCustomIterator>(
         impl_->aux(), *cursor.node, machine, block_id);
 }
+
+template bool
+Db::traverse_blocking<false>(NodeCursor const &, TraverseMachine &, uint64_t);
+template bool
+Db::traverse_blocking<true>(NodeCursor const &, TraverseMachine &, uint64_t);
 
 void Db::update_finalized_version(uint64_t const version)
 {

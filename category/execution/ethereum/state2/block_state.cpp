@@ -123,12 +123,18 @@ vm::SharedVarcode BlockState::read_code(bytes32_t const &code_hash)
 {
     // vm
     if (auto vcode = vm_.find_varcode(code_hash)) {
+        if (code_hash != NULL_HASH) {
+            read_codes_.emplace(code_hash, (*vcode)->intercode());
+        }
         return *vcode;
     }
     // block state
     {
         Code::const_accessor it{};
         if (code_.find(it, code_hash)) {
+            if (code_hash != NULL_HASH) {
+                read_codes_.emplace(code_hash, it->second);
+            }
             return vm_.try_insert_varcode(code_hash, it->second);
         }
     }
@@ -142,6 +148,9 @@ vm::SharedVarcode BlockState::read_code(bytes32_t const &code_hash)
             fmt::format("{}", code_hash).c_str(),
             result->size(),
             db_.get_block_number());
+        if (code_hash != NULL_HASH) {
+            read_codes_.emplace(code_hash, result);
+        }
         return vm_.try_insert_varcode(code_hash, result);
     }
 }
@@ -229,6 +238,19 @@ void BlockState::merge(State const &state)
             }
         }
         else {
+            // Account destroyed; canonical commit wipes the storage
+            // subtree along with the account leaf. Stash any storage
+            // slot keys that were read pre-destruction so the witness
+            // emit's access set stays complete (see
+            // `self_destruct_storage_reads_` doc).
+            if (!it->second.storage.empty()) {
+                auto &slots = self_destruct_storage_reads_[address];
+                for (auto it2 = it->second.storage.begin();
+                     it2 != it->second.storage.end();
+                     ++it2) {
+                    slots.insert(it2->first);
+                }
+            }
             it->second.storage.clear();
         }
     }
@@ -236,7 +258,11 @@ void BlockState::merge(State const &state)
 
 BlockState::ReleasedState BlockState::release() &&
 {
-    return {std::move(state_), std::move(code_)};
+    return {
+        std::move(state_),
+        std::move(code_),
+        std::move(read_codes_),
+        std::move(self_destruct_storage_reads_)};
 }
 
 void BlockState::log_debug()

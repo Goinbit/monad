@@ -44,6 +44,15 @@ struct TraverseMachine
     virtual void up(unsigned char branch, Node const &) = 0;
     virtual std::unique_ptr<TraverseMachine> clone() const = 0;
 
+    // Only invoked from `preorder_traverse_blocking_impl<true>`. The
+    // default returns an empty span — subclasses that opt into custom
+    // iteration must override.
+    virtual std::span<std::pair<uint8_t, unsigned char> const>
+    iterator(uint16_t const /*mask*/)
+    {
+        return {};
+    }
+
     virtual bool should_visit(Node const &, unsigned char)
     {
         return true;
@@ -65,6 +74,7 @@ namespace detail
         TraverseMachine &machine, unsigned char branch);
 
     // current implementation does not contaminate triedb node caching
+    template <bool UseCustomIterator = false>
     inline bool preorder_traverse_blocking_impl(
         UpdateAux &aux, unsigned char const branch, Node const &node,
         TraverseMachine &traverse, uint64_t const version)
@@ -74,11 +84,19 @@ namespace detail
             --traverse.level;
             return true;
         }
-        for (auto const [idx, next_branch] : NodeChildrenRange(node.mask)) {
+        auto const range = [&] {
+            if constexpr (UseCustomIterator) {
+                return traverse.iterator(node.mask);
+            }
+            else {
+                return NodeChildrenRange(node.mask);
+            }
+        }();
+        for (auto const &[idx, next_branch] : range) {
             if (traverse.should_visit(node, next_branch)) {
                 if (Node::SharedPtr const &next = node.next(idx);
                     next != nullptr) {
-                    if (!preorder_traverse_blocking_impl(
+                    if (!preorder_traverse_blocking_impl<UseCustomIterator>(
                             aux, next_branch, *next, traverse, version)) {
                         --traverse.level;
                         traverse.up(branch, node);
@@ -89,12 +107,13 @@ namespace detail
                 MONAD_ASSERT(aux.is_on_disk());
                 auto const next_node_ondisk =
                     read_node_blocking(aux, node.fnext(idx), version);
-                if (!next_node_ondisk || !preorder_traverse_blocking_impl(
-                                             aux,
-                                             next_branch,
-                                             *next_node_ondisk,
-                                             traverse,
-                                             version)) {
+                if (!next_node_ondisk ||
+                    !preorder_traverse_blocking_impl<UseCustomIterator>(
+                        aux,
+                        next_branch,
+                        *next_node_ondisk,
+                        traverse,
+                        version)) {
                     --traverse.level;
                     traverse.up(branch, node);
                     return false;
@@ -374,11 +393,12 @@ namespace detail
 }
 
 // return value indicates if we have done the full traversal or not
+template <bool UseCustomIterator = false>
 inline bool preorder_traverse_blocking(
     UpdateAux &aux, Node const &node, TraverseMachine &traverse,
     uint64_t const version)
 {
-    auto const ret = detail::preorder_traverse_blocking_impl(
+    auto const ret = detail::preorder_traverse_blocking_impl<UseCustomIterator>(
         aux, INVALID_BRANCH, node, traverse, version);
     MONAD_ASSERT(traverse.level == 0);
     return ret;

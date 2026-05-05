@@ -149,6 +149,9 @@ public:
         NodeCursor const &, TraverseMachine &, uint64_t block_id,
         size_t concurrency_limit = 4096);
     // Blocking traverse never wait on a fiber future.
+    // `UseCustomIterator=true` calls `TraverseMachine::iterator(mask)` to
+    // produce the child visit order; otherwise visits in nibble order.
+    template <bool UseCustomIterator = false>
     bool
     traverse_blocking(NodeCursor const &, TraverseMachine &, uint64_t block_id);
     uint64_t get_latest_version() const;

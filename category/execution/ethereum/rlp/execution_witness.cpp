@@ -14,11 +14,10 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <category/execution/ethereum/rlp/decode.hpp>
+#include <category/execution/ethereum/rlp/encode2.hpp>
 #include <category/execution/ethereum/rlp/execution_witness.hpp>
 
 #include <boost/outcome/try.hpp>
-
-#include <cstring>
 
 MONAD_NAMESPACE_BEGIN
 
@@ -37,23 +36,8 @@ Result<ExecutionWitness> parse_execution_witness(byte_string_view witness_bytes)
     ExecutionWitness w{};
 
     BOOST_OUTCOME_TRY(w.block_rlp, rlp::parse_string_metadata(outer));
-
-    BOOST_OUTCOME_TRY(
-        auto const pre_root, rlp::decode_byte_string_fixed<32>(outer));
-    std::memcpy(w.pre_state_root.bytes, pre_root.data(), 32);
-
-    BOOST_OUTCOME_TRY(
-        auto const post_root, rlp::decode_byte_string_fixed<32>(outer));
-    std::memcpy(w.post_state_root.bytes, post_root.data(), 32);
-
     BOOST_OUTCOME_TRY(w.encoded_nodes, rlp::parse_list_metadata(outer));
-
     BOOST_OUTCOME_TRY(w.encoded_codes, rlp::parse_list_metadata(outer));
-
-    // preimages — advance past it, do not store.
-    BOOST_OUTCOME_TRY(auto const preimages, rlp::parse_list_metadata(outer));
-    (void)preimages;
-
     BOOST_OUTCOME_TRY(w.encoded_headers, rlp::parse_list_metadata(outer));
 
     if (MONAD_UNLIKELY(!outer.empty())) {
@@ -61,6 +45,35 @@ Result<ExecutionWitness> parse_execution_witness(byte_string_view witness_bytes)
     }
 
     return w;
+}
+
+byte_string encode_execution_witness(
+    byte_string_view const block_rlp, std::span<byte_string const> const nodes,
+    std::span<byte_string const> const codes,
+    std::span<byte_string const> const headers)
+{
+    byte_string nodes_body;
+    for (auto const &n : nodes) {
+        nodes_body += rlp::encode_string2(n);
+    }
+
+    byte_string codes_body;
+    for (auto const &c : codes) {
+        codes_body += rlp::encode_string2(c);
+    }
+
+    // Each header is already RLP-encoded as a list; we wrap each one as
+    // an opaque string in this outer list (first byte 0xb8/0xb9).
+    byte_string headers_body;
+    for (auto const &h : headers) {
+        headers_body += rlp::encode_string2(h);
+    }
+
+    return rlp::encode_list2(
+        rlp::encode_string2(block_rlp),
+        rlp::encode_list2(nodes_body),
+        rlp::encode_list2(codes_body),
+        rlp::encode_list2(headers_body));
 }
 
 MONAD_NAMESPACE_END
