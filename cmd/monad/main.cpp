@@ -441,6 +441,7 @@ try {
         secondary_triedb.emplace(*secondary_db);
     }
 
+    db.reset_state_machine(std::make_unique<MonadOnDiskMachine>());
     auto const result = [&] {
         switch (chain_config) {
         case CHAIN_CONFIG_ETHEREUM_MAINNET:
