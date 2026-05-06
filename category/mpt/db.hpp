@@ -199,6 +199,13 @@ public:
 
     bool timeline_active(timeline_id tid) const;
 
+    // Returns the timeline this Db instance is bound to. Primary Dbs
+    // constructed via the public ctors return timeline_id::primary;
+    // Dbs returned from activate_secondary_timeline /
+    // open_secondary_timeline return timeline_id::secondary. In-memory
+    // Dbs are always primary.
+    timeline_id tid() const;
+
     void reset_state_machine(std::unique_ptr<StateMachine>);
 
 private:

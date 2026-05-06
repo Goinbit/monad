@@ -97,6 +97,7 @@ struct Db::Impl
     virtual void
     move_trie_version_fiber_blocking(uint64_t src, uint64_t dest) = 0;
     virtual void reset_state_machine(std::unique_ptr<StateMachine>) = 0;
+    virtual timeline_id tid() const = 0;
 };
 
 AsyncIOContext::AsyncIOContext(ReadOnlyOnDiskDbConfig const &options)
@@ -257,6 +258,11 @@ public:
     {
         MONAD_ABORT("Db::reset_state_machine is unsupported for read-only Db");
     }
+
+    virtual timeline_id tid() const override
+    {
+        return tid_;
+    }
 };
 
 class Db::InMemory final : public Db::Impl
@@ -337,6 +343,11 @@ public:
     {
         MONAD_ASSERT(machine);
         machine_ = std::move(machine);
+    }
+
+    virtual timeline_id tid() const override
+    {
+        return timeline_id::primary;
     }
 };
 
@@ -924,6 +935,11 @@ public:
             std::shared_ptr<StateMachine>(std::move(machine)),
             std::memory_order_release);
     }
+
+    virtual timeline_id tid() const override
+    {
+        return tid_;
+    }
 };
 
 struct RODb::Impl final
@@ -1354,6 +1370,12 @@ bool Db::timeline_active(timeline_id const tid) const
 {
     MONAD_ASSERT(impl_);
     return impl_->aux().metadata_ctx().timeline_active(tid);
+}
+
+timeline_id Db::tid() const
+{
+    MONAD_ASSERT(impl_);
+    return impl_->tid();
 }
 
 uint64_t Db::get_history_length() const
