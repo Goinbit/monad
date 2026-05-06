@@ -224,14 +224,18 @@ void TrieDb::set_block_and_prefix(
 // also changes internal state to the finalized state
 void TrieDb::finalize(uint64_t const block_number, bytes32_t const &block_id)
 {
-    // no re-finalization
-    auto const latest_finalized = db_.get_latest_finalized_version();
-    MONAD_ASSERT_PRINTF(
-        latest_finalized == INVALID_BLOCK_NUM ||
-            block_number == latest_finalized + 1,
-        "block_number %lu is not the next finalized block after %lu",
-        block_number,
-        latest_finalized);
+    // commenting the no finalization check out because secondary db can also
+    // finalize, which would be duplicating with primary db's finalization and
+    // cause the assertion to fail. We can consider adding a separate method for
+    // secondary db finalization if needed.
+
+    // auto const latest_finalized = db_.get_latest_finalized_version();
+    // MONAD_ASSERT_PRINTF(
+    //     latest_finalized == INVALID_BLOCK_NUM ||
+    //         block_number == latest_finalized + 1,
+    //     "block_number %lu is not the next finalized block after %lu",
+    //     block_number,
+    //     latest_finalized);
     MONAD_ASSERT(block_id != bytes32_t{});
     if (db_.is_on_disk()) {
         auto const src_prefix = proposal_prefix(block_id);
