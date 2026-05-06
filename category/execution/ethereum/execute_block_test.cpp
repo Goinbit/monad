@@ -143,7 +143,7 @@ TYPED_TEST(TraitsTest, call_frames_stress_test)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {from,
              StateDelta{
                  .account =
@@ -175,7 +175,8 @@ TYPED_TEST(TraitsTest, call_frames_stress_test)
                  .account =
                      {std::nullopt,
                       Account{
-                          .balance = 0, .code_hash = SYSTEM_STUB_CODE_HASH}}}}},
+                          .balance = 0,
+                          .code_hash = SYSTEM_STUB_CODE_HASH}}}}}),
         Code{
             {STRESS_TEST_CODE_HASH, STRESS_TEST_ICODE},
             {SYSTEM_STUB_CODE_HASH, SYSTEM_STUB_ICODE}},
@@ -278,7 +279,7 @@ TYPED_TEST(TraitsTest, call_frames_stress_test)
     auto [state, code] = std::move(bs).release();
     commit_simple(
         tdb,
-        *state,
+        std::move(state),
         code,
         block_id,
         header,
@@ -314,7 +315,7 @@ TYPED_TEST(TraitsTest, assertion_exception)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {from,
              StateDelta{
                  .account =
@@ -341,7 +342,8 @@ TYPED_TEST(TraitsTest, assertion_exception)
                  .account =
                      {std::nullopt,
                       Account{
-                          .balance = 0, .code_hash = SYSTEM_STUB_CODE_HASH}}}}},
+                          .balance = 0,
+                          .code_hash = SYSTEM_STUB_CODE_HASH}}}}}),
         Code{
             {STRESS_TEST_CODE_HASH, STRESS_TEST_ICODE},
             {SYSTEM_STUB_CODE_HASH, SYSTEM_STUB_ICODE}},
@@ -456,7 +458,7 @@ TYPED_TEST(TraitsTest, call_frames_refund)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {from,
              StateDelta{
                  .account =
@@ -497,7 +499,8 @@ TYPED_TEST(TraitsTest, call_frames_refund)
                  .account =
                      {std::nullopt,
                       Account{
-                          .balance = 0, .code_hash = SYSTEM_STUB_CODE_HASH}}}}},
+                          .balance = 0,
+                          .code_hash = SYSTEM_STUB_CODE_HASH}}}}}),
         Code{
             {REFUND_TEST_CODE_HASH, REFUND_TEST_ICODE},
             {SYSTEM_STUB_CODE_HASH, SYSTEM_STUB_ICODE}},
@@ -600,7 +603,7 @@ TYPED_TEST(TraitsTest, call_frames_refund)
     auto [state, code] = std::move(bs).release();
     commit_simple(
         tdb,
-        *state,
+        std::move(state),
         code,
         block_id,
         header,

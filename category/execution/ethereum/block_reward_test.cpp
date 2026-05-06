@@ -52,7 +52,8 @@ TYPED_TEST(TraitsTest, apply_block_reward)
     vm::VM vm;
     commit_sequential(
         tdb,
-        StateDeltas{{a, StateDelta{.account = {std::nullopt, Account{}}}}},
+        std::make_unique<StateDeltas>(
+            StateDeltas{{a, StateDelta{.account = {std::nullopt, Account{}}}}}),
         Code{},
         BlockHeader{});
 

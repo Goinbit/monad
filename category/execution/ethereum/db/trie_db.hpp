@@ -23,6 +23,7 @@
 #include <category/execution/ethereum/core/transaction.hpp>
 #include <category/execution/ethereum/db/commit_builder.hpp>
 #include <category/execution/ethereum/db/db.hpp>
+#include <category/execution/ethereum/db/db_cache.hpp>
 #include <category/execution/ethereum/db/util.hpp>
 #include <category/execution/ethereum/trace/call_frame.hpp>
 #include <category/mpt/compute.hpp>
@@ -50,9 +51,10 @@ class TrieDb final : public ::monad::Db
     bytes32_t proposal_block_id_;
     ::monad::mpt::Nibbles prefix_;
     ::monad::mpt::Node::SharedPtr curr_root_;
+    std::unique_ptr<DbCache> cache_;
 
 public:
-    explicit TrieDb(mpt::Db &);
+    explicit TrieDb(mpt::Db &, bool enable_multiblock_cache = false);
     ~TrieDb();
 
     void reset_root(::monad::mpt::Node::SharedPtr root, uint64_t block_number);
@@ -68,7 +70,7 @@ public:
 
     virtual void commit(
         bytes32_t const &block_id, CommitBuilder &builder,
-        BlockHeader const &header, StateDeltas const &state_deltas,
+        BlockHeader const &header, std::unique_ptr<StateDeltas> state_deltas,
         std::function<void(BlockHeader &)> populate_header_fn) override;
 
     virtual void

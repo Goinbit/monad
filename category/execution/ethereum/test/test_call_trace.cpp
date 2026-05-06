@@ -122,7 +122,7 @@ TYPED_TEST(TraitsTest, execute_success)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {ADDR_A,
              StateDelta{
                  .account =
@@ -135,7 +135,7 @@ TYPED_TEST(TraitsTest, execute_success)
              StateDelta{
                  .account =
                      {std::nullopt,
-                      Account{.balance = 0, .code_hash = NULL_HASH}}}}},
+                      Account{.balance = 0, .code_hash = NULL_HASH}}}}}),
         Code{},
         BlockHeader{});
 
@@ -199,7 +199,7 @@ TYPED_TEST(TraitsTest, execute_reverted_insufficient_balance)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {ADDR_A,
              StateDelta{
                  .account =
@@ -212,7 +212,7 @@ TYPED_TEST(TraitsTest, execute_reverted_insufficient_balance)
              StateDelta{
                  .account =
                      {std::nullopt,
-                      Account{.balance = 0, .code_hash = NULL_HASH}}}}},
+                      Account{.balance = 0, .code_hash = NULL_HASH}}}}}),
         Code{},
         BlockHeader{});
 
@@ -281,7 +281,7 @@ TYPED_TEST(TraitsTest, create_call_trace)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {ADDR_A,
              StateDelta{
                  .account =
@@ -292,7 +292,7 @@ TYPED_TEST(TraitsTest, create_call_trace)
              StateDelta{
                  .account =
                      {std::nullopt,
-                      Account{.balance = 0, .code_hash = code_hash}}}}},
+                      Account{.balance = 0, .code_hash = code_hash}}}}}),
         Code{
             {code_hash, icode},
         },
@@ -396,7 +396,7 @@ TYPED_TEST(TraitsTest, selfdestruct_logs)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {ADDR_A,
              StateDelta{
                  .account =
@@ -407,7 +407,7 @@ TYPED_TEST(TraitsTest, selfdestruct_logs)
              StateDelta{
                  .account =
                      {std::nullopt,
-                      Account{.balance = 1000u, .code_hash = code_hash}}}}},
+                      Account{.balance = 1000u, .code_hash = code_hash}}}}}),
         Code{
             {code_hash, icode},
         },
@@ -477,7 +477,7 @@ TYPED_TEST(TraitsTest, selfdestruct_logs_value)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {ADDR_C,
              StateDelta{
                  .account =
@@ -488,7 +488,7 @@ TYPED_TEST(TraitsTest, selfdestruct_logs_value)
              StateDelta{
                  .account =
                      {std::nullopt,
-                      Account{.balance = 1000u, .code_hash = code_hash}}}}},
+                      Account{.balance = 1000u, .code_hash = code_hash}}}}}),
         Code{
             {code_hash, icode},
         },
@@ -572,13 +572,14 @@ TYPED_TEST(TraitsTest, selfdestruct_depth)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {ADDR_A,
              StateDelta{
                  .account =
                      {std::nullopt,
                       Account{
-                          .balance = std::numeric_limits<uint256_t>::max()}}}}},
+                          .balance =
+                              std::numeric_limits<uint256_t>::max()}}}}}),
         Code{},
         BlockHeader{});
 
@@ -643,7 +644,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {ADDR_A,
              StateDelta{
                  .account =
@@ -651,7 +652,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace)
                       Account{
                           .balance = std::numeric_limits<uint256_t>::max()}}}},
             {ADDR_B,
-             StateDelta{.account = {std::nullopt, Account{.balance = 0}}}}},
+             StateDelta{.account = {std::nullopt, Account{.balance = 0}}}}}),
         Code{},
         BlockHeader{});
 
@@ -746,7 +747,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_selfdestruct)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {ADDR_C,
              StateDelta{
                  .account =
@@ -757,7 +758,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_selfdestruct)
              StateDelta{
                  .account =
                      {std::nullopt,
-                      Account{.balance = 1000u, .code_hash = code_hash}}}}},
+                      Account{.balance = 1000u, .code_hash = code_hash}}}}}),
         Code{
             {code_hash, icode},
         },
@@ -849,7 +850,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_selfdestruct_zero_balance)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {ADDR_C,
              StateDelta{
                  .account =
@@ -860,7 +861,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_selfdestruct_zero_balance)
              StateDelta{
                  .account =
                      {std::nullopt,
-                      Account{.balance = 0u, .code_hash = code_hash}}}}},
+                      Account{.balance = 0u, .code_hash = code_hash}}}}}),
         Code{
             {code_hash, icode},
         },
@@ -984,7 +985,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {TX_SENDER_ADDR,
              StateDelta{
                  .account =
@@ -1002,9 +1003,9 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs)
                      {std::nullopt,
                       Account{
                           .balance = 1'000'000,
-                          .code_hash = selfdestruct_code_hash}}}}}
+                          .code_hash = selfdestruct_code_hash}}}}})
 
-        ,
+            ,
         Code{
             {intermediary_code_hash, intermediary_contract},
             {selfdestruct_code_hash, selfdestruct_contract},
@@ -1207,7 +1208,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs_recursive)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {TX_SENDER_ADDR,
              StateDelta{
                  .account =
@@ -1218,9 +1219,9 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs_recursive)
                      {std::nullopt,
                       Account{
                           .balance = 1'000'000UL,
-                          .code_hash = selfdestruct_code_hash}}}}}
+                          .code_hash = selfdestruct_code_hash}}}}})
 
-        ,
+            ,
         Code{
             {selfdestruct_code_hash, selfdestruct_contract},
         },
@@ -1363,7 +1364,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_transfers)
 
     commit_sequential(
         tdb,
-        StateDeltas{
+        std::make_unique<StateDeltas>(StateDeltas{
             {ADDR_A,
              StateDelta{
                  .account =
@@ -1372,9 +1373,9 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_transfers)
                           .balance = 1'000'000'000'000UL,
                           .code_hash = a_code_hash}}}},
             {ADDR_B,
-             StateDelta{.account = {std::nullopt, Account{.balance = 1UL}}}}}
+             StateDelta{.account = {std::nullopt, Account{.balance = 1UL}}}}})
 
-        ,
+            ,
         Code{{a_code_hash, a_contract}},
         BlockHeader{});
 

@@ -48,11 +48,11 @@ struct Storage : public ::testing::Test
     {
         commit_sequential(
             tdb,
-            StateDeltas{
+            std::make_unique<StateDeltas>(StateDeltas{
                 {ADDRESS,
                  StateDelta{
                      .account =
-                         {std::nullopt, Account{.balance = 1, .nonce = 1}}}}},
+                         {std::nullopt, Account{.balance = 1, .nonce = 1}}}}}),
             Code{},
             BlockHeader{});
         state.touch(ADDRESS);
