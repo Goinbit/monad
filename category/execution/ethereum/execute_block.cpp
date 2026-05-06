@@ -306,6 +306,8 @@ Result<std::vector<Receipt>> execute_block(
     std::span<std::unique_ptr<trace::StateTracer>> const state_tracers,
     ChainContext<traits> const &chain_ctx)
 {
+    static_assert(traits::evm_rev() > EVMC_TANGERINE_WHISTLE);
+
     TRACE_BLOCK_EVENT(StartBlock);
 
     MONAD_ASSERT(senders.size() == block.transactions.size());
@@ -351,9 +353,7 @@ Result<std::vector<Receipt>> execute_block(
 
     apply_block_reward<traits>(state, block);
 
-    if constexpr (traits::evm_rev() >= EVMC_SPURIOUS_DRAGON) {
-        state.destruct_touched_dead();
-    }
+    state.destruct_touched_dead();
 
     MONAD_ASSERT(block_state.can_merge(state));
     block_state.merge(state);

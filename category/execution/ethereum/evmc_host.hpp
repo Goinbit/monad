@@ -133,9 +133,6 @@ struct EvmcHost final : public EvmcHostBase
     account_exists(evmc::address const &address) const noexcept override
     {
         try {
-            if constexpr (traits::evm_rev() < EVMC_SPURIOUS_DRAGON) {
-                return state_.account_exists(address);
-            }
             return !state_.account_is_dead(address);
         }
         catch (...) {
