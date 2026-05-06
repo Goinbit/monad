@@ -53,13 +53,9 @@ namespace trace
 
     namespace
     {
-        template <uint8_t shift>
         constexpr bytes32_t compute_page_key(bytes32_t const &key) noexcept
         {
-            static_assert(
-                shift < 8,
-                "shift == 8 zeros the carry term, producing the wrong page "
-                "key");
+            constexpr uint8_t shift = constants::MIP8_STORAGE_PAGE_SHIFT;
             bytes32_t result{};
             result.bytes[0] = static_cast<uint8_t>(key.bytes[0] >> shift);
             for (int i = 1; i < 32; ++i) {
@@ -229,17 +225,17 @@ namespace trace
             auto const &accessed = current_account_state.get_accessed_storage();
 
             auto keys = json::array();
-            if constexpr (traits::page_gas_active()) {
+            if constexpr (traits::mip_8_active()) {
                 // Under page-gas (MIP-8), warming one slot per page warms
                 // all 128 slots on that page. Keep only the minimum slot
                 // per page to avoid charging users for redundant entries.
                 Map<bytes32_t, bytes32_t> page_to_min_slot{};
                 for (auto const &key : accessed) {
-                    auto const page_key =
-                        compute_page_key<traits::storage_page_shift()>(key);
-                    auto const it = page_to_min_slot.find(page_key);
-                    if (it == page_to_min_slot.end() || key < it->second) {
-                        page_to_min_slot.insert_or_assign(page_key, key);
+                    auto const page_key = compute_page_key(key);
+                    auto const [it, inserted] =
+                        page_to_min_slot.try_emplace(page_key, key);
+                    if (!inserted && key < it->second) {
+                        it->second = key;
                     }
                 }
                 for (auto const &[_, slot] : page_to_min_slot) {

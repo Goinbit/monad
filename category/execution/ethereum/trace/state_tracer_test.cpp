@@ -1665,14 +1665,13 @@ TEST(PrestateTracer, prestate_empty_block_no_reward)
     }
 }
 
-// Under page-gas (MIP-8, monad_pricing_version >= 2), eth_createAccessList
-// deduplicates storage keys to one minimum-slot representative per page.
+// Under MIP-8 (mip_8_active), eth_createAccessList deduplicates storage keys
+// to one minimum-slot representative per page.
 
 TYPED_TEST(MonadTraitsTest, access_list_page_dedup_same_page)
 {
-    if constexpr (!TestFixture::Trait::page_gas_active()) {
-        GTEST_SKIP()
-            << "page-gas dedup only active at monad_pricing_version >= 2";
+    if constexpr (!TestFixture::Trait::mip_8_active()) {
+        GTEST_SKIP() << "page-gas dedup only active when mip_8_active";
     }
 
     InMemoryMachine machine;
@@ -1715,9 +1714,8 @@ TYPED_TEST(MonadTraitsTest, access_list_page_dedup_same_page)
 
 TYPED_TEST(MonadTraitsTest, access_list_page_dedup_same_page_three_slots)
 {
-    if constexpr (!TestFixture::Trait::page_gas_active()) {
-        GTEST_SKIP()
-            << "page-gas dedup only active at monad_pricing_version >= 2";
+    if constexpr (!TestFixture::Trait::mip_8_active()) {
+        GTEST_SKIP() << "page-gas dedup only active when mip_8_active";
     }
 
     InMemoryMachine machine;
@@ -1760,11 +1758,10 @@ TYPED_TEST(MonadTraitsTest, access_list_page_dedup_same_page_three_slots)
     EXPECT_EQ(storage, nlohmann::json::parse(json_str));
 }
 
-TYPED_TEST(MonadTraitsTest, access_list_page_gas_passthrough_two_addresses)
+TYPED_TEST(MonadTraitsTest, access_list_mip8_passthrough_two_addresses)
 {
-    if constexpr (!TestFixture::Trait::page_gas_active()) {
-        GTEST_SKIP()
-            << "page-gas dedup only active at monad_pricing_version >= 2";
+    if constexpr (!TestFixture::Trait::mip_8_active()) {
+        GTEST_SKIP() << "page-gas dedup only active when mip_8_active";
     }
 
     InMemoryMachine machine;
@@ -1820,9 +1817,8 @@ TYPED_TEST(MonadTraitsTest, access_list_page_gas_passthrough_two_addresses)
 
 TYPED_TEST(MonadTraitsTest, access_list_page_dedup_one_addr_two_pages)
 {
-    if constexpr (!TestFixture::Trait::page_gas_active()) {
-        GTEST_SKIP()
-            << "page-gas dedup only active at monad_pricing_version >= 2";
+    if constexpr (!TestFixture::Trait::mip_8_active()) {
+        GTEST_SKIP() << "page-gas dedup only active when mip_8_active";
     }
 
     InMemoryMachine machine;
@@ -1868,9 +1864,9 @@ TYPED_TEST(MonadTraitsTest, access_list_page_dedup_one_addr_two_pages)
 
 TYPED_TEST(MonadTraitsTest, access_list_page_dedup_old_revision)
 {
-    if constexpr (TestFixture::Trait::page_gas_active()) {
-        GTEST_SKIP() << "old-revision behaviour only tested before "
-                        "monad_pricing_version 2";
+    if constexpr (TestFixture::Trait::mip_8_active()) {
+        GTEST_SKIP()
+            << "old-revision behaviour only tested before mip_8_active";
     }
 
     InMemoryMachine machine;
@@ -1914,9 +1910,8 @@ TYPED_TEST(MonadTraitsTest, access_list_page_dedup_old_revision)
 
 TYPED_TEST(MonadTraitsTest, access_list_page_dedup_page_boundary)
 {
-    if constexpr (!TestFixture::Trait::page_gas_active()) {
-        GTEST_SKIP()
-            << "page-gas dedup only active at monad_pricing_version >= 2";
+    if constexpr (!TestFixture::Trait::mip_8_active()) {
+        GTEST_SKIP() << "page-gas dedup only active when mip_8_active";
     }
 
     InMemoryMachine machine;
@@ -1960,4 +1955,56 @@ TYPED_TEST(MonadTraitsTest, access_list_page_dedup_page_boundary)
     EXPECT_EQ(
         boundary_keys[1],
         "0x0000000000000000000000000000000000000000000000000000000000000080");
+}
+
+TYPED_TEST(MonadTraitsTest, access_list_page_dedup_multi_byte_page_boundary)
+{
+    if constexpr (!TestFixture::Trait::mip_8_active()) {
+        GTEST_SKIP() << "page-gas dedup only active when mip_8_active";
+    }
+
+    InMemoryMachine machine;
+    mpt::Db db{machine};
+    TrieDb tdb{db};
+    vm::VM vm;
+
+    commit_sequential(tdb, StateDeltas{}, Code{}, BlockHeader{.number = 0});
+
+    BlockState bs(tdb, vm);
+    State s(bs, Incarnation{0, 0});
+
+    s.create_account_no_rollback(addr1);
+    s.create_account_no_rollback(addr2);
+    s.create_account_no_rollback(addr3);
+    s.create_account_no_rollback(addr4);
+
+    // 0x00ff is the last slot on page 1; 0x0100 is the first slot on page 2.
+    // key.bytes[30] == 0x01 for slot 0x0100, so the carry term
+    // (key.bytes[i-1] << 1) is non-zero — exercising cross-byte shifting.
+    // Both slots must survive deduplication since they are on different pages.
+    constexpr auto page1_last =
+        0x00000000000000000000000000000000000000000000000000000000000000ff_bytes32;
+    constexpr auto page2_first =
+        0x0000000000000000000000000000000000000000000000000000000000000100_bytes32;
+    s.access_storage(addr4, page1_last);
+    s.access_storage(addr4, page2_first);
+
+    nlohmann::json storage;
+    auto const authorities = std::vector<std::optional<Address>>{};
+    auto const to = std::optional<Address>{addr3};
+    AccessListTracer tracer{storage, addr1, addr2, to, authorities};
+    tracer.encode<typename TestFixture::Trait>(s);
+
+    ASSERT_EQ(storage.size(), 1U);
+    EXPECT_EQ(
+        storage[0]["address"], "0xc8ba32cab1757528daf49033e3673fae77dcf05d");
+    auto boundary_keys = storage[0]["storageKeys"];
+    std::sort(boundary_keys.begin(), boundary_keys.end());
+    ASSERT_EQ(boundary_keys.size(), 2U);
+    EXPECT_EQ(
+        boundary_keys[0],
+        "0x00000000000000000000000000000000000000000000000000000000000000ff");
+    EXPECT_EQ(
+        boundary_keys[1],
+        "0x0000000000000000000000000000000000000000000000000000000000000100");
 }

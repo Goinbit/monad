@@ -40,6 +40,8 @@ namespace monad
         inline constexpr size_t MAX_CODE_SIZE_MONAD_TWO = 128 * 1024;
         inline constexpr size_t MAX_INITCODE_SIZE_MONAD_FOUR =
             2 * MAX_CODE_SIZE_MONAD_TWO;
+
+        inline constexpr uint8_t MIP8_STORAGE_PAGE_SHIFT = 7; // 128-slot pages
     }
 
     template <typename T>
@@ -56,7 +58,7 @@ namespace monad
         { T::eip_7883_active() } -> std::same_as<bool>;
         { T::eip_7951_active() } -> std::same_as<bool>;
         { T::mip_3_active() } -> std::same_as<bool>;
-        { T::page_gas_active() } -> std::same_as<bool>;
+        { T::mip_8_active() } -> std::same_as<bool>;
         { T::can_create_inside_delegated() } -> std::same_as<bool>;
 
         // Constants
@@ -64,7 +66,6 @@ namespace monad
         { T::max_initcode_size() } -> std::same_as<size_t>;
         { T::cold_account_cost() } -> std::same_as<int64_t>;
         { T::cold_storage_cost() } -> std::same_as<int64_t>;
-        { T::storage_page_shift() } -> std::same_as<uint8_t>;
 
         // Instead of storing a revision, caches should identify revision
         // changes by storing the opaque value returned by this method. No
@@ -125,14 +126,9 @@ namespace monad
             return false;
         }
 
-        static consteval bool page_gas_active() noexcept
+        static consteval bool mip_8_active() noexcept
         {
             return false;
-        }
-
-        static consteval uint8_t storage_page_shift() noexcept
-        {
-            return 7; // MIP-8: 128-slot pages, fixed for all page-gas revisions
         }
 
         static consteval bool can_create_inside_delegated() noexcept
@@ -253,15 +249,10 @@ namespace monad
             return false;
         }
 
-        // Pricing version 1 activates the changes in:
-        // Monad specification §4: Opcode Gas Costs and Gas Refunds
-        // Pricing version 2 activates page-level storage gas scheduling
-        // (MIP-8).
+        // Pricing version 1 activates Monad-specific opcode/precompile costs
+        // (Monad specification §4). Max return value is 1.
         static consteval uint8_t monad_pricing_version() noexcept
         {
-            if constexpr (Rev >= MONAD_NEXT) {
-                return 2;
-            }
             if constexpr (Rev >= MONAD_SEVEN) {
                 return 1;
             }
@@ -269,14 +260,9 @@ namespace monad
             return 0;
         }
 
-        static consteval bool page_gas_active() noexcept
+        static consteval bool mip_8_active() noexcept
         {
-            return monad_pricing_version() >= 2;
-        }
-
-        static consteval uint8_t storage_page_shift() noexcept
-        {
-            return 7; // MIP-8: 128-slot pages, fixed for all page-gas revisions
+            return Rev >= MONAD_NEXT;
         }
 
         static consteval size_t max_code_size() noexcept
