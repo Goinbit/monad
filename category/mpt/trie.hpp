@@ -415,10 +415,12 @@ Node::SharedPtr upsert(
 // Note that `src_root` may be of a different version than `dest_root`.
 // Any pre-existing trie at `dest_prefix` will be overwritten.
 // The in-memory effect is similar to a move operation.
+// `tid` selects which timeline's root-offset metadata gets updated when
+// `write_root` is true and which timeline the source node reads target.
 Node::SharedPtr copy_trie_to_dest(
     UpdateAux &, Node::SharedPtr src_root, NibblesView src_prefix,
     Node::SharedPtr dest_root, NibblesView dest_prefix, uint64_t dest_version,
-    bool write_root = true);
+    timeline_id tid, bool write_root = true);
 
 // load all nodes as far as caching policy would allow
 size_t load_all(UpdateAux &, StateMachine &, NodeCursor const &);

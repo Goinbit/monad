@@ -378,6 +378,7 @@ public:
         Node::SharedPtr dest_root;
         NibblesView dest;
         uint64_t dest_version;
+        timeline_id tid;
         bool write_root;
     };
 
@@ -614,6 +615,7 @@ private:
                             std::move(req->dest_root),
                             req->dest,
                             req->dest_version,
+                            req->tid,
                             req->write_root);
                         req->promise.set_value(std::move(root));
                     }
@@ -900,9 +902,6 @@ public:
         Node::SharedPtr dest_root, NibblesView const dest_prefix,
         uint64_t const dest_version, bool const write_root = true) override
     {
-        // copy_trie's worker handler (FiberCopyTrieRequest) carries no tid;
-        // it always operates on the primary timeline. Surface that here.
-        MONAD_ASSERT(tid_ == timeline_id::primary);
         if (unflushed_version_ != INVALID_BLOCK_NUM &&
             unflushed_version_ != dest_version) {
             LOG_WARNING_CFORMAT(
@@ -923,6 +922,7 @@ public:
             .dest_root = std::move(dest_root),
             .dest = dest_prefix,
             .dest_version = dest_version,
+            .tid = tid_,
             .write_root = write_root});
         return fut.get();
     }
