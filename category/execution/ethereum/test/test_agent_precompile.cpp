@@ -5,7 +5,7 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// Tests for the Meritium Agent precompile at address 0x0101.
+// Tests for the Meritium Agent precompile at address 0x0201.
 // Covers:
 //   - selector-based gas metering
 //   - selector-based dispatch in agent_execute

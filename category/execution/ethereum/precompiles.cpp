@@ -110,10 +110,12 @@ std::optional<PrecompiledContract> resolve_precompile(Address const &address)
     }
 
     // Meritium Agent precompile (M4).
-    // Deployed at 0x0101 because Monad's PRAGUE already occupies 0x0b-0x11
-    // (BLS12-381) and 0x0100 (P256_VERIFY / EIP-7951). Always active —
-    // Agent identity lookup is a Meritium-native feature, not a hard fork.
-    CASE(0x0101, meritium::agent_gas_cost, meritium::agent_execute);
+    // 0x0101 collides with common test fixture EOAs (ADDR_B), so we place it
+    // at 0x0201. Always active: Agent identity lookup is Meritium-native.
+    CASE(
+        meritium::AGENT_PRECOMPILE_ADDRESS,
+        meritium::agent_gas_cost,
+        meritium::agent_execute);
 
 #undef CASE
 

@@ -13,7 +13,7 @@
 
 #include <cstdint>
 
-// Meritium Agent precompile — deployed at address 0x0101.
+// Meritium Agent precompile — deployed at address 0x0201.
 //
 // Exposes six selector-dispatched functions for Agent identity / reputation
 // lookup (see chain/precompile/agent_precompile.rs for the Rust mirror):
@@ -25,9 +25,11 @@
 //   0x8ca719ce  getAgentTier(bytes32 agentId)                 -> uint8
 //   0x5a1c253b  getReputation(bytes32 agentId)                -> uint16
 //
-// Address selection: Monad's PRAGUE hard fork allocates 0x0b–0x11 to the
-// BLS12-381 precompiles and 0x0100 to P256_VERIFY (EIP-7951). 0x0101 is the
-// first free Rollup-precompile address.
+// Address selection:
+// - Monad's PRAGUE hard fork allocates 0x0b–0x11 to BLS12-381 precompiles.
+// - 0x0100 is reserved by P256_VERIFY (EIP-7951).
+// - Test fixtures use 0x0101/0x0102 heavily as normal EOAs.
+// Therefore we place Agent precompile at 0x0201 to avoid collisions.
 //
 // M4 STATUS (stub): no state backing yet. Every lookup returns the
 // "not registered" / zero default. Gas is still metered correctly. M5 will
@@ -36,6 +38,8 @@
 MONAD_NAMESPACE_BEGIN
 
 namespace meritium {
+
+inline constexpr uint64_t AGENT_PRECOMPILE_ADDRESS = 0x0201;
 
 // Gas costs — mirror of `chain/precompile/gas.rs`.
 inline constexpr uint64_t AGENT_VERIFY_GAS         = 3'000;
