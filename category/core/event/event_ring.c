@@ -14,7 +14,6 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <errno.h>
-#include <stdbit.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -29,6 +28,7 @@
 #include <category/core/event/event_recorder.h>
 #include <category/core/event/event_ring.h>
 #include <category/core/format_err.h>
+#include <category/core/mem/align.h>
 #include <category/core/srcloc.h>
 
 thread_local char _g_monad_event_ring_error_buf[1024];

@@ -16,6 +16,7 @@
 #include <category/core/assert.h>
 #include <category/core/int.hpp>
 #include <category/core/likely.h>
+#include <category/execution/ethereum/agent_state.hpp>
 #include <category/execution/ethereum/block_hash_buffer.hpp>
 #include <category/execution/ethereum/chain/chain.hpp>
 #include <category/execution/ethereum/core/block.hpp>
@@ -422,8 +423,12 @@ Result<Receipt> ExecuteTransaction<traits>::operator()()
     {
         TRACE_TXN_EVENT(StartExecution);
 
+        uint64_t const agent_state_version_before =
+            block_state_.agent_state_table().version();
         State state{block_state_, Incarnation{header_.number, i_ + 1}};
         state.set_original_nonce(sender_, tx_.nonce);
+        meritium::ScopedAgentStateTableContext const agent_state_ctx{
+            block_state_.agent_state_table()};
 
         call_tracer_.reset();
 
@@ -434,7 +439,9 @@ Result<Receipt> ExecuteTransaction<traits>::operator()()
             prev_.get_future().wait();
         }
 
-        if (block_state_.can_merge(state)) {
+        if (block_state_.can_merge(state) &&
+            block_state_.agent_state_table().version() ==
+                agent_state_version_before) {
             if (result.has_error()) {
                 return std::move(result.error());
             }
@@ -448,6 +455,8 @@ Result<Receipt> ExecuteTransaction<traits>::operator()()
         TRACE_TXN_EVENT(StartRetry);
 
         State state{block_state_, Incarnation{header_.number, i_ + 1}};
+        meritium::ScopedAgentStateTableContext const agent_state_ctx{
+            block_state_.agent_state_table()};
 
         call_tracer_.reset();
 

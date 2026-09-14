@@ -221,7 +221,7 @@ TEST_F(AgentSyncFixture, RoundTrip_RegisterCommitClearWarmProducesSameState)
         make_id(0xaa), make_wallet(0x11), AgentTier::Tier2, 450);
     table.register_agent(
         make_id(0xbb), make_wallet(0x22), AgentTier::Tier4, 800);
-    auto const root_before_commit = table.compute_root();
+    auto const root_before_commit = table.compute_fingerprint();
 
     // Step 2: commit cache to MPT.
     commit_with_agent_snapshot(tdb, 1, make_id(0x01), table);
@@ -234,8 +234,8 @@ TEST_F(AgentSyncFixture, RoundTrip_RegisterCommitClearWarmProducesSameState)
     uint64_t const n = table.warm_from_triedb(tdb);
     EXPECT_EQ(n, 2u);
 
-    // Step 5: in-memory root must match pre-commit state.
-    EXPECT_EQ(table.compute_root(), root_before_commit);
+    // Step 5: in-memory fingerprint must match pre-commit state.
+    EXPECT_EQ(table.compute_fingerprint(), root_before_commit);
 
     // Step 6: individual lookups return correct data.
     auto const a = table.find_by_id(make_id(0xaa));

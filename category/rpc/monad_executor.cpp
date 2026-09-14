@@ -263,7 +263,9 @@ namespace
             chain.get_chain_id()));
 
         tdb.set_block_and_prefix(block_number, block_id);
-        BlockState block_state{tdb, vm};
+        meritium::AgentStateTable agent_state_table;
+        (void)agent_state_table.warm_from_triedb(tdb);
+        BlockState block_state{tdb, vm, agent_state_table};
         // avoid conflict with block reward txn
         Incarnation const incarnation{block_number, Incarnation::LAST_TX - 1u};
         apply_state_overrides(block_state, incarnation, state_overrides);
@@ -328,6 +330,8 @@ namespace
             header.base_fee_per_gas,
             0,
             chain_context};
+        meritium::ScopedAgentStateTableContext const agent_state_ctx{
+            block_state.agent_state_table()};
         auto execution_result = ExecuteTransactionNoValidation<traits>{
             chain,
             enriched_txn,
@@ -1229,7 +1233,9 @@ struct monad_executor
                     // Set db to parent block state
                     TrieRODb tdb{db};
                     tdb.set_block_and_prefix(block_number - 1, parent_id);
-                    BlockState block_state{tdb, vm_};
+                    meritium::AgentStateTable agent_state_table;
+                    (void)agent_state_table.warm_from_triedb(tdb);
+                    BlockState block_state{tdb, vm_, agent_state_table};
                     LazyBlockHash block_hash_buffer{db, block_number};
 
                     auto const res = [&]() -> Result<nlohmann::json> {

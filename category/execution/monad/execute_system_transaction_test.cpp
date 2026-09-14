@@ -55,7 +55,8 @@ TEST(SystemTransaction, prestate_trace_staking_epoch_change)
 
     MonadDevnet chain;
 
-    BlockState block_state{tdb, vm};
+    meritium::AgentStateTable block_state_agent_state_table{};
+    BlockState block_state{tdb, vm, block_state_agent_state_table};
     BlockMetrics block_metrics;
 
     BlockHeader const header{.number = 0};
@@ -169,7 +170,8 @@ TEST(SystemTransaction, statediff_trace_staking_epoch_change)
 
     MonadDevnet chain;
 
-    BlockState block_state{tdb, vm};
+    meritium::AgentStateTable block_state_agent_state_table{};
+    BlockState block_state{tdb, vm, block_state_agent_state_table};
     BlockMetrics block_metrics;
 
     BlockHeader const header{.number = 0};
@@ -295,7 +297,8 @@ TEST(SystemTransaction, static_validate_system_transaction_failure)
 
     MonadDevnet chain;
 
-    BlockState block_state{tdb, vm};
+    meritium::AgentStateTable block_state_agent_state_table{};
+    BlockState block_state{tdb, vm, block_state_agent_state_table};
     BlockMetrics block_metrics;
 
     BlockHeader const header{};
@@ -334,7 +337,8 @@ TEST(SystemTransaction, static_validate_transaction_failure)
 
     MonadDevnet chain;
 
-    BlockState block_state{tdb, vm};
+    meritium::AgentStateTable block_state_agent_state_table{};
+    BlockState block_state{tdb, vm, block_state_agent_state_table};
     BlockMetrics block_metrics;
 
     BlockHeader const header{.number = 0};

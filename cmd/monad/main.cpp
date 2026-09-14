@@ -35,6 +35,7 @@
 #include <category/execution/ethereum/db/block_db.hpp>
 #include <category/execution/ethereum/db/db_cache.hpp>
 #include <category/execution/ethereum/db/trie_db.hpp>
+#include <category/execution/ethereum/agent_state.hpp>
 #include <category/execution/ethereum/event/exec_event_ctypes.h>
 #include <category/execution/ethereum/precompiles.hpp>
 #include <category/execution/ethereum/state2/block_state.hpp>
@@ -347,10 +348,11 @@ try {
         return triedb.get_block_number();
     }();
 
+    meritium::AgentStateTable agent_state_table;
     // Meritium: warm AgentStateTable cache from persistent MPT storage.
     // On fresh genesis (init_block_num == 0) this is a no-op; on restart the
     // previously-persisted AGENT_NIBBLE subtree is loaded into memory.
-    meritium::AgentStateTable::instance().warm_from_triedb(triedb);
+    agent_state_table.warm_from_triedb(triedb);
 
     std::unique_ptr<monad::StateSyncServer> sync_server;
     if (!statesync.empty()) {
@@ -456,6 +458,7 @@ try {
                     db_cache,
                     vm,
                     block_hash_buffer,
+                    agent_state_table,
                     priority_pool,
                     block_num,
                     end_block_num,

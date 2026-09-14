@@ -22,6 +22,7 @@
 #include <category/vm/evm/explicit_traits.hpp>
 
 #include <algorithm>
+#include <cstring>
 
 // TODO unstable paths between versions
 #if __has_include(<boost/outcome/experimental/status-code/status-code/config.hpp>)
@@ -95,13 +96,52 @@ Result<void> static_validate_monad_body(
     // bound rather than the upstream Monad single-tx cap. The sum check
     // keeps the original inflation guarantee intact.
     constexpr uint256_t MAXIMUM_BLOCK_REWARD = 25 * staking::MON;
+    constexpr Address AGENT_REWARD_CA = Address{0x1001};
+    // 0x3Ca55197a258FBC3ABFDB3F3d870D7Cca8b52DEC
+    constexpr uint8_t PROTOCOL_FUND_ADDRESS_BYTES[20] = {
+        0x3c, 0xa5, 0x51, 0x97, 0xa2, 0x58, 0xfb, 0xc3, 0xab, 0xfd,
+        0xb3, 0xf3, 0xd8, 0x70, 0xd7, 0xcc, 0xa8, 0xb5, 0x2d, 0xec};
+    // Allow tiny integer-rounding drift when checking 99:1 split.
+    constexpr uint256_t PROTOCOL_RATIO_TOLERANCE_WEI = 10;
+
     uint256_t total_reward = 0;
+    uint256_t agent_reward_total = 0;
+    uint256_t protocol_fund_total = 0;
     for (auto it = txns.begin(); it != end_system_txn; ++it) {
         if (is_reward(*it)) {
             total_reward += it->value;
             if (MONAD_UNLIKELY(total_reward > MAXIMUM_BLOCK_REWARD)) {
                 return MonadBlockError::InvalidRewardValue;
             }
+
+            if (it->to == AGENT_REWARD_CA) {
+                // Meritium AgentReward calldata shape:
+                // selector(4) + agent_id(32) + ... where wallet is
+                // right-aligned in agent_id (last 20 bytes).
+                if (MONAD_UNLIKELY(it->data.size() < 36)) {
+                    return MonadBlockError::InvalidRewardValue;
+                }
+
+                auto const *const wallet_ptr = it->data.data() + 4 + 12;
+                if (std::memcmp(
+                        wallet_ptr, PROTOCOL_FUND_ADDRESS_BYTES, sizeof(PROTOCOL_FUND_ADDRESS_BYTES))
+                    == 0) {
+                    protocol_fund_total += it->value;
+                } else {
+                    agent_reward_total += it->value;
+                }
+            }
+        }
+    }
+
+    if (agent_reward_total > 0 || protocol_fund_total > 0) {
+        // Enforce ProtocolFund ≈ 1% of reward emissions:
+        //   protocol_fund_total * 99 ~= agent_reward_total
+        auto const lhs = protocol_fund_total * 99;
+        auto const rhs = agent_reward_total;
+        auto const diff = lhs > rhs ? lhs - rhs : rhs - lhs;
+        if (MONAD_UNLIKELY(diff > PROTOCOL_RATIO_TOLERANCE_WEI)) {
+            return MonadBlockError::InvalidRewardValue;
         }
     }
 

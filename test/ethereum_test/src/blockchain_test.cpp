@@ -315,7 +315,8 @@ Result<BlockExecOutput> execute(
     TraitsMainnet<traits> const chain{};
     BOOST_OUTCOME_TRY(static_validate_block<traits>(chain, block));
 
-    BlockState block_state(db, vm);
+    meritium::AgentStateTable block_state_agent_state_table{};
+    BlockState block_state(db, vm, block_state_agent_state_table);
     BlockMetrics metrics;
     auto const recovered_senders = recover_senders(block.transactions, *pool_);
     auto const recovered_authorities =
@@ -516,7 +517,8 @@ void process_test(
             withdrawals.emplace(std::vector<Withdrawal>{});
         }
 
-        BlockState bs{tdb, vm};
+        meritium::AgentStateTable bs_agent_state_table{};
+        BlockState bs{tdb, vm, bs_agent_state_table};
         State state{bs, Incarnation{0, 0}};
         j_contents.at("pre").get_to(state);
         bs.merge(state);

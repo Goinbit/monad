@@ -83,7 +83,8 @@ protected:
             mpt::Db db{
                 machine, mpt::OnDiskDbConfig{.dbname_paths = {db_file.path}}};
             TrieDb tdb{db};
-            BlockState bs{tdb, vm};
+            meritium::AgentStateTable bs_agent_state_table{};
+            BlockState bs{tdb, vm, bs_agent_state_table};
             State state{bs, Incarnation{0, 0}};
             NoopCallTracer call_tracer{};
             StakingContract contract{state, call_tracer};

@@ -41,7 +41,8 @@ struct Storage : public ::testing::Test
     vm::VM vm;
     mpt::Db db{machine};
     TrieDb tdb{db};
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     State state{bs, Incarnation{0, 0}};
 
     void SetUp() override

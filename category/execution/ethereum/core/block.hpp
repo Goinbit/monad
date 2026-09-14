@@ -24,7 +24,9 @@
 #include <category/execution/ethereum/core/withdrawal.hpp>
 
 #include <cstdint>
+#include <cstddef>
 #include <optional>
+#include <type_traits>
 #include <vector>
 
 MONAD_NAMESPACE_BEGIN
@@ -74,11 +76,22 @@ struct Block
     friend bool operator==(Block const &, Block const &) = default;
 };
 
-// The exact layout may vary slightly across standard libraries/ABIs.
-static_assert(sizeof(BlockHeader) == 840 || sizeof(BlockHeader) == 848);
+static_assert(std::is_standard_layout_v<BlockHeader>);
 static_assert(alignof(BlockHeader) == 8);
 
-static_assert(sizeof(Block) == 920 || sizeof(Block) == 928);
+static_assert(std::is_standard_layout_v<Block>);
 static_assert(alignof(Block) == 8);
+
+// Keep ABI expectations explicit per STL implementation so a layout drift
+// doesn't silently pass under a broad OR condition.
+#if defined(_LIBCPP_VERSION)
+static_assert(sizeof(BlockHeader) == 848);
+static_assert(sizeof(Block) == 928);
+#elif defined(__GLIBCXX__)
+static_assert(sizeof(BlockHeader) == 840);
+static_assert(sizeof(Block) == 920);
+#else
+#error "Unknown C++ standard library: please pin BlockHeader/Block ABI sizes."
+#endif
 
 MONAD_NAMESPACE_END

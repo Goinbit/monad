@@ -35,6 +35,7 @@
 #include <category/vm/evm/explicit_traits.hpp>
 #include <category/vm/evm/traits.hpp>
 
+#include <cstring>
 #include <optional>
 
 MONAD_ANONYMOUS_NAMESPACE_BEGIN
@@ -52,6 +53,43 @@ struct SyscallSelector
 static_assert(SyscallSelector::REWARD == 0x791bdcf3);
 static_assert(SyscallSelector::SNAPSHOT == 0x157eeb21);
 static_assert(SyscallSelector::ON_EPOCH_CHANGE == 0x1d4e9f02);
+
+struct AgentRegistrationUpdate
+{
+    bytes32_t agent_id;
+    Address wallet;
+    meritium::AgentTier tier;
+    uint16_t reputation;
+};
+
+std::optional<AgentRegistrationUpdate>
+parse_agent_registration_update(Transaction const &tx)
+{
+    if (tx.to != Address{0x1004} || tx.data.size() < 132) {
+        return std::nullopt;
+    }
+
+    auto const *const cd = tx.data.data();
+    bytes32_t agent_id;
+    std::memcpy(agent_id.bytes, cd + 4, 32);
+
+    Address wallet;
+    std::memcpy(wallet.bytes, cd + 36 + 12, 20);
+
+    auto const tier_raw = static_cast<uint8_t>(cd[99]);
+    auto const tier = tier_raw <= 4 ? static_cast<meritium::AgentTier>(tier_raw)
+                                    : meritium::AgentTier::Unregistered;
+
+    uint16_t const reputation =
+        static_cast<uint16_t>(cd[130]) << 8 | static_cast<uint16_t>(cd[131]);
+
+    return AgentRegistrationUpdate{
+        .agent_id = agent_id,
+        .wallet = wallet,
+        .tier = tier,
+        .reputation = reputation,
+    };
+}
 
 MONAD_ANONYMOUS_NAMESPACE_END
 
@@ -108,8 +146,14 @@ Result<Receipt> ExecuteSystemTransaction<traits>::operator()()
     {
         TRACE_TXN_EVENT(StartExecution);
 
+        uint64_t const agent_state_version_before =
+            block_state_.agent_state_table().version();
+        auto const pending_agent_registration =
+            parse_agent_registration_update(tx_);
         State state{block_state_, Incarnation{header_.number, i_ + 1}};
         state.set_original_nonce(sender_, tx_.nonce);
+        meritium::ScopedAgentStateTableContext const agent_state_ctx{
+            block_state_.agent_state_table()};
 
         call_tracer_.reset();
 
@@ -120,9 +164,19 @@ Result<Receipt> ExecuteSystemTransaction<traits>::operator()()
             prev_.get_future().wait();
         }
 
-        if (block_state_.can_merge(state)) {
+        if (block_state_.can_merge(state) &&
+            block_state_.agent_state_table().version() ==
+                agent_state_version_before) {
             if (result.has_error()) {
                 return std::move(result.error());
+            }
+            if (pending_agent_registration.has_value()) {
+                auto const &update = *pending_agent_registration;
+                block_state_.agent_state_table().register_agent(
+                    update.agent_id,
+                    update.wallet,
+                    update.tier,
+                    update.reputation);
             }
             auto const receipt = execute_final(state);
             block_state_.merge(state);
@@ -133,7 +187,11 @@ Result<Receipt> ExecuteSystemTransaction<traits>::operator()()
     {
         TRACE_TXN_EVENT(StartRetry);
 
+        auto const pending_agent_registration =
+            parse_agent_registration_update(tx_);
         State state{block_state_, Incarnation{header_.number, i_ + 1}};
+        meritium::ScopedAgentStateTableContext const agent_state_ctx{
+            block_state_.agent_state_table()};
 
         call_tracer_.reset();
 
@@ -142,6 +200,14 @@ Result<Receipt> ExecuteSystemTransaction<traits>::operator()()
         MONAD_ASSERT(block_state_.can_merge(state));
         if (result.has_error()) {
             return std::move(result.error());
+        }
+        if (pending_agent_registration.has_value()) {
+            auto const &update = *pending_agent_registration;
+            block_state_.agent_state_table().register_agent(
+                update.agent_id,
+                update.wallet,
+                update.tier,
+                update.reputation);
         }
         auto const receipt = execute_final(state);
         block_state_.merge(state);
@@ -202,28 +268,9 @@ Result<void> ExecuteSystemTransaction<traits>::execute(State &state)
                     20);
         state.add_to_balance(agent_wallet, tx_.value);
     } else if (*tx_.to == Address{0x1004} && tx_.data.size() >= 132) {
-        // AgentRegistrationCall (0x1004): register or update an Agent in the
-        // AgentStateTable. Calldata (all ABI-encoded, 4+32+32+32+32 = 132 min):
-        //   bytes 0-3:   selector
-        //   bytes 4-35:  agent_id (bytes32)
-        //   bytes 36-67: wallet (address in last 20 bytes)
-        //   bytes 68-99: tier (uint8 in last byte)
-        //   bytes 100-131: reputation (uint16 in last 2 bytes)
-        auto const *const cd = tx_.data.data();
-        bytes32_t agent_id;
-        std::memcpy(agent_id.bytes, cd + 4, 32);
-        Address wallet;
-        std::memcpy(wallet.bytes, cd + 36 + 12, 20);
-        auto const tier_raw = static_cast<uint8_t>(cd[99]);
-        auto const tier = tier_raw <= 4
-            ? static_cast<meritium::AgentTier>(tier_raw)
-            : meritium::AgentTier::Unregistered;
-        // reputation (uint16) is right-aligned in its 32-byte ABI word
-        // at offset 100, so the value occupies the last 2 bytes (130-131).
-        uint16_t reputation = static_cast<uint16_t>(cd[130]) << 8 |
-                              static_cast<uint16_t>(cd[131]);
-        meritium::AgentStateTable::instance().register_agent(
-            agent_id, wallet, tier, reputation);
+        // AgentRegistrationCall (0x1004):
+        // state mutation is intentionally deferred until merge-accepted path
+        // in operator() to avoid speculative side effects leaking globally.
         state.add_to_balance(*tx_.to, 0);
     } else {
         // 0x1002/0x1003: audit/verification — no value, just accept

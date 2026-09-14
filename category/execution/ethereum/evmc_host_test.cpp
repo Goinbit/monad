@@ -136,7 +136,8 @@ TYPED_TEST(TraitsTest, emit_log)
     mpt::Db db{machine};
     db_t tdb{db};
     vm::VM vm;
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     State state{bs, Incarnation{0, 0}};
     BlockHashBufferFinalized const block_hash_buffer;
     NoopCallTracer call_tracer;
@@ -171,7 +172,8 @@ TYPED_TEST(TraitsTest, access_precompile)
     mpt::Db db{machine};
     db_t tdb{db};
     vm::VM vm;
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     State state{bs, Incarnation{0, 0}};
     BlockHashBufferFinalized const block_hash_buffer;
     NoopCallTracer call_tracer;

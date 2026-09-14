@@ -33,6 +33,9 @@ MONAD_NAMESPACE_BEGIN
 inline constexpr size_t MAX_CODE_SIZE_MONAD_TWO = 128 * 1024;
 inline constexpr size_t MAX_INITCODE_SIZE_MONAD_FOUR =
     2 * MAX_CODE_SIZE_MONAD_TWO;
+inline constexpr uint64_t MERITIUM_DEVNET_CHAIN_ID = 20'260'401;
+inline constexpr uint64_t MERITIUM_TESTNET_CHAIN_ID = 20'260'401;
+inline constexpr uint64_t MERITIUM_MAINNET_CHAIN_ID = 888;
 
 struct BlockHeader;
 struct Transaction;

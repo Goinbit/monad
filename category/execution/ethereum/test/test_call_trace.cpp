@@ -139,7 +139,8 @@ TYPED_TEST(TraitsTest, execute_success)
         Code{},
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     Incarnation const incarnation{0, 0};
     State s{bs, incarnation};
 
@@ -216,7 +217,8 @@ TYPED_TEST(TraitsTest, execute_reverted_insufficient_balance)
         Code{},
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     Incarnation const incarnation{0, 0};
     State s{bs, incarnation};
 
@@ -298,7 +300,8 @@ TYPED_TEST(TraitsTest, create_call_trace)
         },
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     Incarnation const incarnation{0, 0};
     State s{bs, incarnation};
 
@@ -413,7 +416,8 @@ TYPED_TEST(TraitsTest, selfdestruct_logs)
         },
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     Incarnation const incarnation{0, 0};
     State s{bs, incarnation};
 
@@ -494,7 +498,8 @@ TYPED_TEST(TraitsTest, selfdestruct_logs_value)
         },
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     Incarnation const incarnation{0, 0};
     State s{bs, incarnation};
 
@@ -582,7 +587,8 @@ TYPED_TEST(TraitsTest, selfdestruct_depth)
         Code{},
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     Incarnation const incarnation{0, 0};
     State s{bs, incarnation};
 
@@ -655,7 +661,8 @@ TYPED_TEST(TraitsTest, simulate_v1_trace)
         Code{},
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     Incarnation const incarnation{0, 0};
     State s{bs, incarnation};
 
@@ -763,7 +770,8 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_selfdestruct)
         },
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     Incarnation const incarnation{0, 0};
     State s{bs, incarnation};
 
@@ -866,7 +874,8 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_selfdestruct_zero_balance)
         },
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     Incarnation const incarnation{0, 0};
     State s{bs, incarnation};
 
@@ -1011,7 +1020,8 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs)
         },
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     Incarnation const incarnation{0, 0};
     State s{bs, incarnation};
 
@@ -1226,7 +1236,8 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs_recursive)
         },
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     Incarnation const incarnation{0, 0};
     State s{bs, incarnation};
 
@@ -1384,7 +1395,8 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_transfers)
             // so skip.
             continue;
         }
-        BlockState bs{tdb, vm};
+        meritium::AgentStateTable bs_agent_state_table{};
+        BlockState bs{tdb, vm, bs_agent_state_table};
         Incarnation const incarnation{0, 0};
         State s{bs, incarnation};
 

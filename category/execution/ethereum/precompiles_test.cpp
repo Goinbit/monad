@@ -300,7 +300,8 @@ namespace
         mpt::Db db{machine};
         TrieDb tdb{db};
         vm::VM vm;
-        BlockState bs{tdb, vm};
+        meritium::AgentStateTable bs_agent_state_table{};
+        BlockState bs{tdb, vm, bs_agent_state_table};
         State s{bs, Incarnation{0, 0}};
 
         for (auto const &test_case : test_cases) {

@@ -164,7 +164,8 @@ TYPED_TEST(TraitsTest, call_frames_stress_test)
     block_hash_buffer.set(
         block.value().header.number - 1, block.value().header.parent_hash);
 
-    BlockState bs(tdb, vm);
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs(tdb, vm, bs_agent_state_table);
     BlockMetrics metrics;
 
     fiber::PriorityPool pool{1, 1};
@@ -312,7 +313,8 @@ TYPED_TEST(TraitsTest, assertion_exception)
     block_hash_buffer.set(
         block.value().header.number - 1, block.value().header.parent_hash);
 
-    BlockState bs(tdb, vm);
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs(tdb, vm, bs_agent_state_table);
     BlockMetrics metrics;
 
     fiber::PriorityPool pool{1, 1};
@@ -450,7 +452,8 @@ TYPED_TEST(TraitsTest, call_frames_refund)
     block_hash_buffer.set(
         block.value().header.number - 1, block.value().header.parent_hash);
 
-    BlockState bs(tdb, vm);
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs(tdb, vm, bs_agent_state_table);
     BlockMetrics metrics;
 
     fiber::PriorityPool pool{1, 1};

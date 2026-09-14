@@ -21,16 +21,33 @@
  * Utilities for manually aligning sizes and addresses
  */
 
-// TODO(ken): <stdbit.h> is not in C++ until C++26 (P3370), for now we have
-//  to work around this until we're ready to support -std=c++26 when this
-//  C header is included by C++ translation units
+#include <stddef.h>
 #ifdef __cplusplus
+// TODO(ken): <stdbit.h> is not in C++ until C++26 (P3370), for now we have
+// to work around this until we're ready to support -std=c++26 when this C
+// header is included by C++ translation units.
     #include <bit>
 #else
-    #include <stdbit.h>
+    #if defined(__has_include)
+        #if __has_include(<stdbit.h>)
+            #include <stdbit.h>
+        #else
+            #include <stdbool.h>
+static inline bool monad_stdc_has_single_bit_fallback(size_t value)
+{
+    return value != 0 && (value & (value - 1U)) == 0;
+}
+            #define stdc_has_single_bit monad_stdc_has_single_bit_fallback
+        #endif
+    #else
+        #include <stdbool.h>
+static inline bool monad_stdc_has_single_bit_fallback(size_t value)
+{
+    return value != 0 && (value & (value - 1U)) == 0;
+}
+        #define stdc_has_single_bit monad_stdc_has_single_bit_fallback
+    #endif
 #endif
-
-#include <stddef.h>
 
 #include <category/core/assert.h>
 

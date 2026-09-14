@@ -150,7 +150,10 @@ PrecompileResult agent_execute(byte_string_view const input)
     }
 
     uint32_t const selector = read_selector(input);
-    auto const &table = AgentStateTable::instance();
+    auto const *const table = AgentStateTable::try_current();
+    if (MONAD_UNLIKELY(table == nullptr)) {
+        return PrecompileResult::failure();
+    }
 
     switch (selector) {
         case SELECTOR_VERIFY_AGENT: {
@@ -160,7 +163,7 @@ PrecompileResult agent_execute(byte_string_view const input)
             auto const agent_id = read_bytes32_abi(input, SELECTOR_BYTES);
             auto const wallet =
                 read_address_abi(input, SELECTOR_BYTES + ABI_WORD);
-            return make_bool_result(table.verify_binding(agent_id, wallet));
+            return make_bool_result(table->verify_binding(agent_id, wallet));
         }
 
         case SELECTOR_GET_AGENT_ID: {
@@ -168,7 +171,7 @@ PrecompileResult agent_execute(byte_string_view const input)
                 return PrecompileResult::failure();
             }
             auto const wallet = read_address_abi(input, SELECTOR_BYTES);
-            if (auto const rec = table.find_by_wallet(wallet); rec) {
+            if (auto const rec = table->find_by_wallet(wallet); rec) {
                 return make_bytes32_result(rec->agent_id);
             }
             return make_zero_result();
@@ -179,7 +182,7 @@ PrecompileResult agent_execute(byte_string_view const input)
                 return PrecompileResult::failure();
             }
             auto const agent_id = read_bytes32_abi(input, SELECTOR_BYTES);
-            if (auto const rec = table.find_by_id(agent_id); rec) {
+            if (auto const rec = table->find_by_id(agent_id); rec) {
                 return make_address_result(rec->wallet);
             }
             return make_zero_result();
@@ -190,7 +193,7 @@ PrecompileResult agent_execute(byte_string_view const input)
                 return PrecompileResult::failure();
             }
             auto const agent_id = read_bytes32_abi(input, SELECTOR_BYTES);
-            return make_bool_result(table.find_by_id(agent_id).has_value());
+            return make_bool_result(table->find_by_id(agent_id).has_value());
         }
 
         case SELECTOR_GET_AGENT_TIER: {
@@ -198,7 +201,7 @@ PrecompileResult agent_execute(byte_string_view const input)
                 return PrecompileResult::failure();
             }
             auto const agent_id = read_bytes32_abi(input, SELECTOR_BYTES);
-            auto const rec = table.find_by_id(agent_id);
+            auto const rec = table->find_by_id(agent_id);
             return make_uint_result<uint8_t>(
                 rec ? static_cast<uint8_t>(rec->tier) : 0);
         }
@@ -208,7 +211,7 @@ PrecompileResult agent_execute(byte_string_view const input)
                 return PrecompileResult::failure();
             }
             auto const agent_id = read_bytes32_abi(input, SELECTOR_BYTES);
-            auto const rec = table.find_by_id(agent_id);
+            auto const rec = table->find_by_id(agent_id);
             return make_uint_result<uint16_t>(rec ? rec->reputation : 0);
         }
 

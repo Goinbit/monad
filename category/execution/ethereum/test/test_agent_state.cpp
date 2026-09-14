@@ -6,7 +6,7 @@
 // (at your option) any later version.
 
 // Tests for AgentStateTable (Meritium Agent state partition, M5 MVP).
-// Covers CRUD, determinism of the state root, and invariants.
+// Covers CRUD, determinism of the in-memory state fingerprint, and invariants.
 
 #include <category/core/bytes.hpp>
 #include <category/execution/ethereum/agent_state.hpp>
@@ -67,7 +67,7 @@ TEST_F(AgentStateFixture, EmptyTableRootIsZero)
 {
     auto &table = AgentStateTable::instance();
     EXPECT_EQ(table.size(), 0u);
-    EXPECT_EQ(table.compute_root(), bytes32_t{});
+    EXPECT_EQ(table.compute_fingerprint(), bytes32_t{});
 }
 
 TEST_F(AgentStateFixture, RegisterThenLookup)
@@ -215,7 +215,7 @@ TEST_F(AgentStateFixture, UnregisterClearsBothIndexes)
 }
 
 // ============================================================================
-// Root determinism
+// Fingerprint determinism
 // ============================================================================
 
 TEST_F(AgentStateFixture, RootIsDeterministicRegardlessOfInsertionOrder)
@@ -226,7 +226,7 @@ TEST_F(AgentStateFixture, RootIsDeterministicRegardlessOfInsertionOrder)
     table.register_agent(make_id(0x01), make_wallet(0x11), AgentTier::Tier1, 10);
     table.register_agent(make_id(0x02), make_wallet(0x22), AgentTier::Tier2, 20);
     table.register_agent(make_id(0x03), make_wallet(0x33), AgentTier::Tier3, 30);
-    auto const root_forward = table.compute_root();
+    auto const root_forward = table.compute_fingerprint();
 
     table.clear();
 
@@ -234,7 +234,7 @@ TEST_F(AgentStateFixture, RootIsDeterministicRegardlessOfInsertionOrder)
     table.register_agent(make_id(0x03), make_wallet(0x33), AgentTier::Tier3, 30);
     table.register_agent(make_id(0x02), make_wallet(0x22), AgentTier::Tier2, 20);
     table.register_agent(make_id(0x01), make_wallet(0x11), AgentTier::Tier1, 10);
-    auto const root_reverse = table.compute_root();
+    auto const root_reverse = table.compute_fingerprint();
 
     EXPECT_EQ(root_forward, root_reverse);
     EXPECT_NE(root_forward, bytes32_t{});
@@ -243,18 +243,18 @@ TEST_F(AgentStateFixture, RootIsDeterministicRegardlessOfInsertionOrder)
 TEST_F(AgentStateFixture, RootChangesWhenStateChanges)
 {
     auto &table = AgentStateTable::instance();
-    auto const empty_root = table.compute_root();
+    auto const empty_root = table.compute_fingerprint();
 
     table.register_agent(make_id(0x01), make_wallet(0x11), AgentTier::Tier1, 10);
-    auto const one_agent_root = table.compute_root();
+    auto const one_agent_root = table.compute_fingerprint();
     EXPECT_NE(empty_root, one_agent_root);
 
     table.update_reputation(make_id(0x01), 999);
-    auto const reputed_root = table.compute_root();
+    auto const reputed_root = table.compute_fingerprint();
     EXPECT_NE(one_agent_root, reputed_root);
 
     table.update_tier(make_id(0x01), AgentTier::Tier4);
-    auto const tiered_root = table.compute_root();
+    auto const tiered_root = table.compute_fingerprint();
     EXPECT_NE(reputed_root, tiered_root);
 }
 
@@ -262,10 +262,10 @@ TEST_F(AgentStateFixture, RootStableAcrossUnrelatedReads)
 {
     auto &table = AgentStateTable::instance();
     table.register_agent(make_id(0xaa), make_wallet(0x11), AgentTier::Tier2, 250);
-    auto const root_before = table.compute_root();
+    auto const root_before = table.compute_fingerprint();
     (void)table.find_by_id(make_id(0xff));
     (void)table.find_by_wallet(make_wallet(0xff));
-    auto const root_after = table.compute_root();
+    auto const root_after = table.compute_fingerprint();
     EXPECT_EQ(root_before, root_after);
 }
 

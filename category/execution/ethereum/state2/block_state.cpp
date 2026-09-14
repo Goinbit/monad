@@ -47,9 +47,11 @@
 
 MONAD_NAMESPACE_BEGIN
 
-BlockState::BlockState(Db &db, vm::VM &monad_vm)
+BlockState::BlockState(
+    Db &db, vm::VM &monad_vm, meritium::AgentStateTable &agent_state_table)
     : db_{db}
     , vm_{monad_vm}
+    , agent_state_table_{agent_state_table}
     , state_(std::make_unique<StateDeltas>())
 {
 }

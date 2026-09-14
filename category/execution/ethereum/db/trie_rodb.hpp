@@ -17,6 +17,8 @@
 
 #include <category/core/config.hpp>
 #include <category/core/keccak.hpp>
+#include <category/core/monad_exception.hpp>
+#include <category/execution/ethereum/core/rlp/agent_record_rlp.hpp>
 #include <category/execution/ethereum/db/db.hpp>
 #include <category/execution/ethereum/db/util.hpp>
 #include <category/mpt/db.hpp>
@@ -25,6 +27,7 @@
 
 #include <category/core/hex.hpp>
 
+#include <map>
 #include <memory>
 #include <optional>
 
@@ -129,6 +132,81 @@ public:
             return vm::make_shared_intercode({});
         }
         return vm::make_shared_intercode(code_leaf_res.value().node->value());
+    }
+
+    // Meritium (M-03): read path helper used by RPC/trace code paths to warm
+    // AgentStateTable from a read-only Trie view.
+    std::map<bytes32_t, meritium::AgentRecord> enumerate_agents() const
+    {
+        std::map<bytes32_t, meritium::AgentRecord> out;
+
+        auto res_cursor =
+            db_.find(prefix_cursor_, mpt::concat(AGENT_NIBBLE), block_number_);
+        if (!res_cursor.has_value() || !res_cursor.value().is_valid()) {
+            return out;
+        }
+
+        struct AgentTraverse final : public mpt::TraverseMachine
+        {
+            std::map<bytes32_t, meritium::AgentRecord> &sink;
+            mpt::Nibbles path{};
+
+            explicit AgentTraverse(
+                std::map<bytes32_t, meritium::AgentRecord> &sink)
+                : sink(sink)
+            {
+            }
+
+            virtual bool
+            down(unsigned char const branch, mpt::Node const &node) override
+            {
+                if (branch == mpt::INVALID_BRANCH) {
+                    MONAD_ASSERT(node.path_nibble_view().nibble_size() == 0);
+                    return true;
+                }
+                path = concat(
+                    mpt::NibblesView{path}, branch, node.path_nibble_view());
+
+                if (path.nibble_size() == (sizeof(bytes32_t) * 2) &&
+                    node.has_value()) {
+                    auto encoded = node.value();
+                    auto decoded = rlp::decode_agent_record(encoded);
+                    if (decoded.has_value()) {
+                        auto record = std::move(decoded.value());
+                        sink.emplace(record.agent_id, std::move(record));
+                    }
+                }
+                return true;
+            }
+
+            virtual void
+            up(unsigned char const branch, mpt::Node const &node) override
+            {
+                auto const path_view = mpt::NibblesView{path};
+                auto const rem_size = [&] {
+                    if (branch == mpt::INVALID_BRANCH) {
+                        MONAD_ASSERT(path_view.nibble_size() == 0);
+                        return 0;
+                    }
+                    int const rem_size = path_view.nibble_size() - 1 -
+                                         node.path_nibble_view().nibble_size();
+                    MONAD_ASSERT(rem_size >= 0);
+                    return rem_size;
+                }();
+                path = path_view.substr(0, static_cast<unsigned>(rem_size));
+            }
+
+            virtual std::unique_ptr<mpt::TraverseMachine> clone()
+                const override
+            {
+                return std::make_unique<AgentTraverse>(*this);
+            }
+        };
+
+        AgentTraverse traverse(out);
+        MONAD_ASSERT(
+            db_.traverse(res_cursor.value(), traverse, block_number_, 4096));
+        return out;
     }
 
     virtual void commit(

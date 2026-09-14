@@ -48,6 +48,7 @@ using monad::meritium::SELECTOR_GET_REPUTATION;
 using monad::meritium::SELECTOR_GET_WALLET;
 using monad::meritium::SELECTOR_IS_REGISTERED;
 using monad::meritium::SELECTOR_VERIFY_AGENT;
+using monad::meritium::ScopedAgentStateTableContext;
 
 namespace {
 
@@ -71,6 +72,19 @@ void free_output(PrecompileResult const &r) noexcept
     if (r.obuf != nullptr) {
         std::free(r.obuf);
     }
+}
+
+PrecompileResult execute_with_table_context(
+    byte_string_view const input, AgentStateTable &table)
+{
+    ScopedAgentStateTableContext const ctx{table};
+    return monad::meritium::agent_execute(input);
+}
+
+PrecompileResult execute_with_fresh_table(byte_string_view const input)
+{
+    AgentStateTable table;
+    return execute_with_table_context(input, table);
 }
 
 } // namespace
@@ -144,7 +158,7 @@ TEST(AgentPrecompile, GasSelectorTooShort)
 TEST(AgentPrecompile, ExecuteVerifyAgentReturnsZeroWord)
 {
     auto const input = make_input(SELECTOR_VERIFY_AGENT, 2 * ABI_WORD);
-    auto const result = monad::meritium::agent_execute(input);
+    auto const result = execute_with_fresh_table(input);
 
     ASSERT_EQ(result.status_code, EVMC_SUCCESS);
     ASSERT_EQ(result.output_size, ABI_WORD);
@@ -167,7 +181,7 @@ TEST(AgentPrecompile, ExecuteSingleArgSelectorsReturnZeroWord)
     };
     for (uint32_t const sel : selectors) {
         auto const input = make_input(sel, ABI_WORD);
-        auto const result = monad::meritium::agent_execute(input);
+        auto const result = execute_with_fresh_table(input);
         ASSERT_EQ(result.status_code, EVMC_SUCCESS)
             << "selector 0x" << std::hex << sel;
         ASSERT_EQ(result.output_size, ABI_WORD);
@@ -186,7 +200,7 @@ TEST(AgentPrecompile, ExecuteSingleArgSelectorsReturnZeroWord)
 TEST(AgentPrecompile, ExecuteEmptyInputFails)
 {
     byte_string const empty;
-    auto const result = monad::meritium::agent_execute(empty);
+    auto const result = execute_with_fresh_table(empty);
     EXPECT_EQ(result.status_code, EVMC_PRECOMPILE_FAILURE);
     EXPECT_EQ(result.obuf, nullptr);
     EXPECT_EQ(result.output_size, 0u);
@@ -196,7 +210,7 @@ TEST(AgentPrecompile, ExecuteSelectorOnlyFails)
 {
     // Only 4 bytes — selector with no ABI args.
     auto const input = make_input(SELECTOR_GET_AGENT_ID, 0);
-    auto const result = monad::meritium::agent_execute(input);
+    auto const result = execute_with_fresh_table(input);
     EXPECT_EQ(result.status_code, EVMC_PRECOMPILE_FAILURE);
     free_output(result);
 }
@@ -205,7 +219,7 @@ TEST(AgentPrecompile, ExecuteVerifyAgentTruncatedFails)
 {
     // verifyAgent needs 4 + 2*32 bytes; supply only 4 + 32.
     auto const input = make_input(SELECTOR_VERIFY_AGENT, ABI_WORD);
-    auto const result = monad::meritium::agent_execute(input);
+    auto const result = execute_with_fresh_table(input);
     EXPECT_EQ(result.status_code, EVMC_PRECOMPILE_FAILURE);
     free_output(result);
 }
@@ -213,9 +227,18 @@ TEST(AgentPrecompile, ExecuteVerifyAgentTruncatedFails)
 TEST(AgentPrecompile, ExecuteUnknownSelectorFails)
 {
     auto const input = make_input(0xDEADBEEF, ABI_WORD);
-    auto const result = monad::meritium::agent_execute(input);
+    auto const result = execute_with_fresh_table(input);
     EXPECT_EQ(result.status_code, EVMC_PRECOMPILE_FAILURE);
     free_output(result);
+}
+
+TEST(AgentPrecompile, ExecuteWithoutScopedContextFails)
+{
+    auto const input = make_input(SELECTOR_GET_AGENT_ID, ABI_WORD);
+    auto const result = monad::meritium::agent_execute(input);
+    EXPECT_EQ(result.status_code, EVMC_PRECOMPILE_FAILURE);
+    EXPECT_EQ(result.obuf, nullptr);
+    EXPECT_EQ(result.output_size, 0u);
 }
 
 // ============================================================================
@@ -244,7 +267,7 @@ TEST(AgentPrecompile, GasConstantsMatchRust)
 }
 
 // ============================================================================
-// State-backed tests (M5): precompile reads from AgentStateTable singleton.
+// State-backed tests (M5): precompile reads from a scoped AgentStateTable.
 // ============================================================================
 
 namespace {
@@ -253,6 +276,8 @@ namespace {
 class AgentPrecompileWithState : public ::testing::Test
 {
 protected:
+    AgentStateTable table_{};
+
     // Fixed test vectors — mirrored in expected outputs below.
     bytes32_t id_alice_{};
     Address wallet_alice_{};
@@ -263,7 +288,7 @@ protected:
 
     void SetUp() override
     {
-        AgentStateTable::instance().clear();
+        table_.clear();
 
         // Alice: Tier2, reputation 450
         std::memset(id_alice_.bytes, 0xAA, 32);
@@ -275,7 +300,7 @@ protected:
         std::memset(id_carol_.bytes, 0xCC, 32);
         std::memset(wallet_carol_.bytes, 0x33, 20);
 
-        auto &tbl = AgentStateTable::instance();
+        auto &tbl = table_;
         tbl.register_agent(id_alice_, wallet_alice_, AgentTier::Tier2, 450);
         tbl.register_agent(id_bob_, wallet_bob_, AgentTier::Tier4, 800);
         tbl.register_agent(id_carol_, wallet_carol_, AgentTier::Tier1, 50);
@@ -283,7 +308,7 @@ protected:
 
     void TearDown() override
     {
-        AgentStateTable::instance().clear();
+        table_.clear();
     }
 
     // Build verifyAgent(bytes32 id, address wallet) input.
@@ -331,7 +356,7 @@ uint64_t read_uint_abi(uint8_t const *word, size_t n)
 TEST_F(AgentPrecompileWithState, VerifyAgentMatchingBindingReturnsTrue)
 {
     auto const input = make_verify_input(id_alice_, wallet_alice_);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     ASSERT_EQ(r.output_size, ABI_WORD);
     EXPECT_EQ(r.obuf[31], 1); // true
@@ -344,7 +369,7 @@ TEST_F(AgentPrecompileWithState, VerifyAgentMatchingBindingReturnsTrue)
 TEST_F(AgentPrecompileWithState, VerifyAgentWrongWalletReturnsFalse)
 {
     auto const input = make_verify_input(id_alice_, wallet_bob_);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     ASSERT_EQ(r.output_size, ABI_WORD);
     EXPECT_EQ(r.obuf[31], 0);
@@ -356,7 +381,7 @@ TEST_F(AgentPrecompileWithState, VerifyAgentUnregisteredReturnsFalse)
     bytes32_t id_unknown{};
     std::memset(id_unknown.bytes, 0xEE, 32);
     auto const input = make_verify_input(id_unknown, wallet_alice_);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     EXPECT_EQ(r.obuf[31], 0);
     free_output(r);
@@ -365,7 +390,7 @@ TEST_F(AgentPrecompileWithState, VerifyAgentUnregisteredReturnsFalse)
 TEST_F(AgentPrecompileWithState, GetAgentIdReturnsBinding)
 {
     auto const input = make_addr_input(SELECTOR_GET_AGENT_ID, wallet_bob_);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     ASSERT_EQ(r.output_size, ABI_WORD);
     EXPECT_EQ(std::memcmp(r.obuf, id_bob_.bytes, 32), 0);
@@ -377,7 +402,7 @@ TEST_F(AgentPrecompileWithState, GetAgentIdUnknownWalletReturnsZero)
     Address unknown{};
     std::memset(unknown.bytes, 0xEE, 20);
     auto const input = make_addr_input(SELECTOR_GET_AGENT_ID, unknown);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     for (size_t i = 0; i < ABI_WORD; ++i) {
         EXPECT_EQ(r.obuf[i], 0);
@@ -388,7 +413,7 @@ TEST_F(AgentPrecompileWithState, GetAgentIdUnknownWalletReturnsZero)
 TEST_F(AgentPrecompileWithState, GetWalletReturnsLeftPaddedAddress)
 {
     auto const input = make_id_input(SELECTOR_GET_WALLET, id_carol_);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     ASSERT_EQ(r.output_size, ABI_WORD);
     // First 12 bytes should be zero-padding.
@@ -403,7 +428,7 @@ TEST_F(AgentPrecompileWithState, GetWalletReturnsLeftPaddedAddress)
 TEST_F(AgentPrecompileWithState, IsRegisteredTrueForKnownAgent)
 {
     auto const input = make_id_input(SELECTOR_IS_REGISTERED, id_alice_);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     EXPECT_EQ(r.obuf[31], 1);
     free_output(r);
@@ -414,7 +439,7 @@ TEST_F(AgentPrecompileWithState, IsRegisteredFalseForUnknownAgent)
     bytes32_t id_unknown{};
     std::memset(id_unknown.bytes, 0xEE, 32);
     auto const input = make_id_input(SELECTOR_IS_REGISTERED, id_unknown);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     EXPECT_EQ(r.obuf[31], 0);
     free_output(r);
@@ -423,7 +448,7 @@ TEST_F(AgentPrecompileWithState, IsRegisteredFalseForUnknownAgent)
 TEST_F(AgentPrecompileWithState, GetAgentTierReturnsTierEnumValue)
 {
     auto const input = make_id_input(SELECTOR_GET_AGENT_TIER, id_bob_);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     EXPECT_EQ(read_uint_abi(r.obuf, 1), 4u); // Tier4
     free_output(r);
@@ -434,7 +459,7 @@ TEST_F(AgentPrecompileWithState, GetAgentTierUnknownReturnsZero)
     bytes32_t id_unknown{};
     std::memset(id_unknown.bytes, 0xEE, 32);
     auto const input = make_id_input(SELECTOR_GET_AGENT_TIER, id_unknown);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     EXPECT_EQ(read_uint_abi(r.obuf, 1), 0u);
     free_output(r);
@@ -443,7 +468,7 @@ TEST_F(AgentPrecompileWithState, GetAgentTierUnknownReturnsZero)
 TEST_F(AgentPrecompileWithState, GetReputationReturnsUint16)
 {
     auto const input = make_id_input(SELECTOR_GET_REPUTATION, id_alice_);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     EXPECT_EQ(read_uint_abi(r.obuf, 2), 450u);
     free_output(r);
@@ -454,7 +479,7 @@ TEST_F(AgentPrecompileWithState, GetReputationUnknownReturnsZero)
     bytes32_t id_unknown{};
     std::memset(id_unknown.bytes, 0xEE, 32);
     auto const input = make_id_input(SELECTOR_GET_REPUTATION, id_unknown);
-    auto const r = monad::meritium::agent_execute(input);
+    auto const r = execute_with_table_context(input, table_);
     ASSERT_EQ(r.status_code, EVMC_SUCCESS);
     EXPECT_EQ(read_uint_abi(r.obuf, 2), 0u);
     free_output(r);

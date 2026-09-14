@@ -342,10 +342,16 @@ int monad_event_open_hugetlbfs_dir_fd(
         monad_hugetlbfs_open_dir_fd(&params, dirfd, pathbuf, pathbuf_size);
     if (rc != 0) {
         // Copy the error message directly, since we added nothing interesting
-        strlcpy(
+        int const copied = snprintf(
             _g_monad_event_ring_error_buf,
-            monad_hugetlbfs_get_last_error(),
-            sizeof _g_monad_event_ring_error_buf);
+            sizeof _g_monad_event_ring_error_buf,
+            "%s",
+            monad_hugetlbfs_get_last_error());
+        if (copied < 0 ||
+            (size_t)copied >= sizeof _g_monad_event_ring_error_buf) {
+            _g_monad_event_ring_error_buf
+                [sizeof _g_monad_event_ring_error_buf - 1] = '\0';
+        }
     }
     return rc;
 }
@@ -367,7 +373,8 @@ int monad_event_resolve_ring_file(
     if (strchr(file, '/') != nullptr) {
         // The event ring file contains a '/' character; this is resolved
         // relative to the current working directory
-        if (strlcpy(pathbuf, file, pathbuf_size) >= pathbuf_size) {
+        int const copied = snprintf(pathbuf, pathbuf_size, "%s", file);
+        if (copied < 0 || (size_t)copied >= pathbuf_size) {
             return FORMAT_ERRC(
                 ENAMETOOLONG,
                 "file %s overflows %zu size pathbuf",

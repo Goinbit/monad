@@ -87,6 +87,7 @@ void log_tps(
 template <Traits traits>
 Result<void> process_ethereum_block(
     Chain const &chain, DbCache &db, vm::VM &vm,
+    meritium::AgentStateTable &agent_state_table,
     BlockHashBufferFinalized &block_hash_buffer,
     fiber::PriorityPool &priority_pool, Block &block, bytes32_t const &block_id,
     bytes32_t const &parent_block_id, bool const enable_tracing)
@@ -149,7 +150,7 @@ Result<void> process_ethereum_block(
     // changes but does not commit them
     db.set_block_and_prefix(block.header.number - 1, parent_block_id);
     BlockMetrics block_metrics;
-    BlockState block_state(db, vm);
+    BlockState block_state(db, vm, agent_state_table);
 
     ChainContext<traits> const chain_ctx{};
     record_block_marker_event(MONAD_EXEC_BLOCK_PERF_EVM_ENTER);
@@ -285,6 +286,7 @@ Result<std::pair<uint64_t, uint64_t>> runloop_ethereum(
     uint64_t ntxs = 0;
     BlockDb block_db(ledger_dir);
     bytes32_t parent_block_id{};
+    meritium::AgentStateTable agent_state_table;
 
     while (block_num <= end_block_num && stop == 0) {
         Block block;
@@ -303,6 +305,7 @@ Result<std::pair<uint64_t, uint64_t>> runloop_ethereum(
                 chain,
                 db,
                 vm,
+                agent_state_table,
                 block_hash_buffer,
                 priority_pool,
                 block,

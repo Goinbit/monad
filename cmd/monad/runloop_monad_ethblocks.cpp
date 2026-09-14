@@ -117,6 +117,7 @@ template <Traits traits>
     requires is_monad_trait_v<traits>
 Result<void> process_monad_block(
     MonadChain const &chain, DbCache &db, vm::VM &vm,
+    meritium::AgentStateTable &agent_state_table,
     BlockHashBufferFinalized &block_hash_buffer,
     fiber::PriorityPool &priority_pool, Block &block, bytes32_t const &block_id,
     bytes32_t const &parent_block_id, bool const enable_tracing,
@@ -208,7 +209,7 @@ Result<void> process_monad_block(
         to_bytes(keccak256(rlp::encode_block_header(db.read_eth_header())));
 
     BlockMetrics block_metrics;
-    BlockState block_state(db, vm);
+    BlockState block_state(db, vm, agent_state_table);
     record_block_marker_event(MONAD_EXEC_BLOCK_PERF_EVM_ENTER);
     BOOST_OUTCOME_TRY(
         auto const receipts,
@@ -337,6 +338,7 @@ Result<std::pair<uint64_t, uint64_t>> runloop_monad_ethblocks(
     BlockDb block_db(ledger_dir);
     bytes32_t parent_block_id{};
     uint64_t block_num = finalized_block_num;
+    meritium::AgentStateTable agent_state_table;
 
     ankerl::unordered_dense::segmented_set<Address>
         grandparent_senders_and_authorities;
@@ -419,6 +421,7 @@ Result<std::pair<uint64_t, uint64_t>> runloop_monad_ethblocks(
                 chain,
                 db,
                 vm,
+                agent_state_table,
                 block_hash_buffer,
                 priority_pool,
                 block,

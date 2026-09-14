@@ -56,7 +56,8 @@ TYPED_TEST(TraitsTest, apply_block_reward)
         Code{},
         BlockHeader{});
 
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     State as{bs, Incarnation{0, 0}};
 
     EXPECT_TRUE(as.account_exists(a));

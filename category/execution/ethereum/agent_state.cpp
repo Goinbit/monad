@@ -7,10 +7,12 @@
 
 #include <category/execution/ethereum/agent_state.hpp>
 
+#include <category/core/assert.h>
 #include <category/core/byte_string.hpp>
 #include <category/core/keccak.hpp>
 #include <category/execution/ethereum/db/commit_builder.hpp>
 #include <category/execution/ethereum/db/trie_db.hpp>
+#include <category/execution/ethereum/db/trie_rodb.hpp>
 
 #include <cstring>
 #include <mutex>
@@ -19,12 +21,42 @@
 MONAD_NAMESPACE_BEGIN
 namespace meritium {
 
+namespace
+{
+thread_local AgentStateTable *g_current_agent_state_table = nullptr;
+} // namespace
+
 AgentStateTable &AgentStateTable::instance()
 {
     // C++11 guarantees a thread-safe first-access init for block-scope
     // statics, so this is the idiomatic thread-safe singleton.
     static AgentStateTable table;
     return table;
+}
+
+AgentStateTable &AgentStateTable::current()
+{
+    auto *const table = try_current();
+    MONAD_ASSERT_PRINTF(
+        table != nullptr,
+        "AgentStateTable::current() called without "
+        "ScopedAgentStateTableContext");
+    return *table;
+}
+
+AgentStateTable *AgentStateTable::try_current()
+{
+    return current_ptr_for_thread();
+}
+
+AgentStateTable *AgentStateTable::current_ptr_for_thread()
+{
+    return g_current_agent_state_table;
+}
+
+void AgentStateTable::set_current_ptr_for_thread(AgentStateTable *table)
+{
+    g_current_agent_state_table = table;
 }
 
 bool AgentStateTable::register_agent(
@@ -56,6 +88,7 @@ bool AgentStateTable::register_agent(
         .reputation = reputation,
     };
     wallet_to_id_[wallet] = agent_id;
+    ++version_;
     return true;
 }
 
@@ -67,7 +100,11 @@ bool AgentStateTable::update_reputation(
     if (it == by_id_.end()) {
         return false;
     }
+    if (it->second.reputation == reputation) {
+        return true;
+    }
     it->second.reputation = reputation;
+    ++version_;
     return true;
 }
 
@@ -79,7 +116,11 @@ bool AgentStateTable::update_tier(
     if (it == by_id_.end()) {
         return false;
     }
+    if (it->second.tier == tier) {
+        return true;
+    }
     it->second.tier = tier;
+    ++version_;
     return true;
 }
 
@@ -92,13 +133,18 @@ void AgentStateTable::unregister(bytes32_t const &agent_id)
     }
     wallet_to_id_.erase(it->second.wallet);
     by_id_.erase(it);
+    ++version_;
 }
 
 void AgentStateTable::clear()
 {
     std::lock_guard<std::mutex> lock(mu_);
+    if (by_id_.empty() && wallet_to_id_.empty()) {
+        return;
+    }
     by_id_.clear();
     wallet_to_id_.clear();
+    ++version_;
 }
 
 std::optional<AgentRecord>
@@ -142,6 +188,12 @@ uint64_t AgentStateTable::size() const
     return static_cast<uint64_t>(by_id_.size());
 }
 
+uint64_t AgentStateTable::version() const
+{
+    std::lock_guard<std::mutex> lock(mu_);
+    return version_;
+}
+
 uint64_t AgentStateTable::warm_from_triedb(::monad::TrieDb &tdb)
 {
     // Pull everything off disk outside the lock; acquire only to swap in.
@@ -155,6 +207,24 @@ uint64_t AgentStateTable::warm_from_triedb(::monad::TrieDb &tdb)
         wallet_to_id_[record.wallet] = id;
         by_id_.emplace(id, std::move(record));
     }
+    ++version_;
+    return count;
+}
+
+uint64_t AgentStateTable::warm_from_triedb(::monad::TrieRODb &tdb)
+{
+    // Pull everything off disk outside the lock; acquire only to swap in.
+    auto loaded = tdb.enumerate_agents();
+    uint64_t const count = loaded.size();
+
+    std::lock_guard<std::mutex> lock(mu_);
+    by_id_.clear();
+    wallet_to_id_.clear();
+    for (auto &&[id, record] : loaded) {
+        wallet_to_id_[record.wallet] = id;
+        by_id_.emplace(id, std::move(record));
+    }
+    ++version_;
     return count;
 }
 
@@ -169,12 +239,11 @@ void AgentStateTable::export_to_commit(::monad::CommitBuilder &builder) const
     builder.add_agent_state(snapshot);
 }
 
-bytes32_t AgentStateTable::compute_root() const
+bytes32_t AgentStateTable::compute_fingerprint() const
 {
     std::lock_guard<std::mutex> lock(mu_);
 
-    // Empty table => root of zeros. Keeps block hashes stable on chains
-    // that haven't registered any agents yet.
+    // Empty table => all-zeros fingerprint.
     if (by_id_.empty()) {
         return bytes32_t{};
     }
@@ -198,6 +267,11 @@ bytes32_t AgentStateTable::compute_root() const
     bytes32_t out;
     std::memcpy(out.bytes, digest.bytes, 32);
     return out;
+}
+
+bytes32_t AgentStateTable::compute_root() const
+{
+    return compute_fingerprint();
 }
 
 } // namespace meritium

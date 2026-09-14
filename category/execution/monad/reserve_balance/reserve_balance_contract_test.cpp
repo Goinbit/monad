@@ -79,7 +79,8 @@ struct ReserveBalanceTest : public ::testing::Test
     vm::VM vm;
     mpt::Db db{machine};
     TrieDb tdb{db};
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     State state{bs, Incarnation{0, 0}};
     NoopCallTracer call_tracer;
     ReserveBalanceContract contract{state, call_tracer};
@@ -245,7 +246,8 @@ void run_dipped_into_reserve_test(
     mpt::Db db{machine};
     TrieDb tdb{db};
     vm::VM vm;
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     NoopCallTracer call_tracer;
     evmc_tx_context const tx_context{};
     BlockHashBufferFinalized block_hash_buffer{};
@@ -578,7 +580,8 @@ struct MonadPrecompileTest : public ::MonadTraitsTest<MonadRevisionT>
     vm::VM vm;
     mpt::Db db{machine};
     TrieDb tdb{db};
-    BlockState bs{tdb, vm};
+    meritium::AgentStateTable bs_agent_state_table{};
+    BlockState bs{tdb, vm, bs_agent_state_table};
     State state{bs, Incarnation{0, 0}};
     NoopCallTracer call_tracer;
 

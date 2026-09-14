@@ -32,7 +32,8 @@ struct InMemoryStateTestBase
     mpt::Db db{machine};
     TrieDb tdb{db};
     vm::VM vm;
-    BlockState block_state{tdb, vm};
+    meritium::AgentStateTable block_state_agent_state_table{};
+    BlockState block_state{tdb, vm, block_state_agent_state_table};
     State state{block_state, Incarnation{0, 0}};
 };
 

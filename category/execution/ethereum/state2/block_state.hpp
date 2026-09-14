@@ -21,6 +21,7 @@
 #include <category/execution/ethereum/core/receipt.hpp>
 #include <category/execution/ethereum/core/transaction.hpp>
 #include <category/execution/ethereum/db/db.hpp>
+#include <category/execution/ethereum/agent_state.hpp>
 #include <category/execution/ethereum/state2/state_deltas.hpp>
 #include <category/execution/ethereum/trace/call_tracer.hpp>
 #include <category/execution/ethereum/types/incarnation.hpp>
@@ -37,15 +38,26 @@ class BlockState final
 {
     Db &db_;
     vm::VM &vm_;
+    meritium::AgentStateTable &agent_state_table_;
     std::unique_ptr<StateDeltas> state_;
     Code code_;
 
 public:
-    BlockState(Db &, vm::VM &);
+    BlockState(Db &, vm::VM &, meritium::AgentStateTable &agent_state_table);
 
     vm::VM &vm()
     {
         return vm_;
+    }
+
+    meritium::AgentStateTable &agent_state_table()
+    {
+        return agent_state_table_;
+    }
+
+    meritium::AgentStateTable const &agent_state_table() const
+    {
+        return agent_state_table_;
     }
 
     std::optional<Account> read_account(Address const &);

@@ -62,13 +62,22 @@ void monad_assertion_failed(
         written = (ssize_t)sizeof(buffer) - 1;
     }
     if (msg != nullptr) {
-        written += (ssize_t)strlcpy(
-            buffer + written, msg, sizeof(buffer) - (size_t)written);
-        if ((size_t)written >= sizeof(buffer)) {
-            written = (int)(sizeof(buffer) - 1);
+        size_t const available = sizeof(buffer) - (size_t)written;
+        int const copied = snprintf(buffer + written, available, "%s", msg);
+        if (copied < 0) {
+            written = (ssize_t)(sizeof(buffer) - 1);
+        }
+        else if ((size_t)copied >= available) {
+            written = (ssize_t)(sizeof(buffer) - 1);
         }
         else {
-            buffer[written++] = '\n';
+            written += (ssize_t)copied;
+            if ((size_t)written < sizeof(buffer) - 1) {
+                buffer[written++] = '\n';
+            }
+            else {
+                written = (ssize_t)(sizeof(buffer) - 1);
+            }
         }
     }
     // abort() is async signal safe in glibc

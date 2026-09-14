@@ -29,7 +29,8 @@ namespace monad::staking::test
         OnDiskMachine mpt_machine_;
         mpt::Db mpt_db_{mpt_machine_};
         TrieDb trie_db_{mpt_db_};
-        BlockState block_state_{trie_db_, vm_};
+        meritium::AgentStateTable agent_state_table_{};
+        BlockState block_state_{trie_db_, vm_, agent_state_table_};
         State state_{block_state_, Incarnation{0, 0}};
         NoopCallTracer call_tracer_{};
         StakingContract contract_{state_, call_tracer_};
