@@ -109,9 +109,9 @@ std::optional<PrecompiledContract> resolve_precompile(Address const &address)
         CASE(0x0100, p256_verify_gas_cost, p256_verify_execute);
     }
 
-    // Meritium Agent precompile (M4).
-    // 0x0101 collides with common test fixture EOAs (ADDR_B), so we place it
-    // at 0x0201. Always active: Agent identity lookup is Meritium-native.
+    // Meritium Agent precompile (M4/M5). Always active: Agent identity
+    // lookup is Meritium-native, not a hard-fork gate — unlike 0x0100 above,
+    // so it is observable in every test traits configuration.
     CASE(
         meritium::AGENT_PRECOMPILE_ADDRESS,
         meritium::agent_gas_cost,

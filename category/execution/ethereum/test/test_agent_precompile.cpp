@@ -5,17 +5,16 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// Tests for the Meritium Agent precompile at address 0x0201.
+// Tests for the Meritium Agent precompile at address 0x0101.
 // Covers:
+//   - selectors derived from real Keccak256 of the ABI signatures
 //   - selector-based gas metering
 //   - selector-based dispatch in agent_execute
 //   - input length validation
-//   - the M4 stub contract (all lookups -> 32-byte zero word)
-//
-// When M5 (Agent State Partition) lands, replace the "returns zero" checks
-// with real fixtures populated via TrieDB FFI.
+//   - table-backed lookups (M5): missing agents resolve to the zero word
 
 #include <category/core/byte_string.hpp>
+#include <category/core/keccak.hpp>
 #include <category/execution/ethereum/agent_state.hpp>
 #include <category/execution/ethereum/precompiles.hpp>
 #include <category/execution/ethereum/precompiles_agent.hpp>
@@ -36,6 +35,7 @@ using monad::meritium::ABI_WORD;
 using monad::meritium::AGENT_INVALID_SELECTOR_GAS;
 using monad::meritium::AGENT_IS_REGISTERED_GAS;
 using monad::meritium::AGENT_LOOKUP_GAS;
+using monad::meritium::AGENT_PRECOMPILE_ADDRESS;
 using monad::meritium::AGENT_REPUTATION_GAS;
 using monad::meritium::AGENT_TIER_GAS;
 using monad::meritium::AGENT_VERIFY_GAS;
@@ -66,6 +66,16 @@ byte_string make_input(uint32_t const selector, size_t const payload_bytes = 0)
     return out;
 }
 
+// Selector recomputed from the ABI signature, so a hand-typed constant in
+// precompiles_agent.hpp cannot pass by agreeing with itself.
+uint32_t real_selector(char const *const signature)
+{
+    auto const hash = keccak256(byte_string_view(
+        reinterpret_cast<uint8_t const *>(signature), std::strlen(signature)));
+    return (uint32_t{hash.bytes[0]} << 24) | (uint32_t{hash.bytes[1]} << 16) |
+           (uint32_t{hash.bytes[2]} << 8) | uint32_t{hash.bytes[3]};
+}
+
 // Release any allocated output buffer attached to a PrecompileResult.
 void free_output(PrecompileResult const &r) noexcept
 {
@@ -88,6 +98,47 @@ PrecompileResult execute_with_fresh_table(byte_string_view const input)
 }
 
 } // namespace
+
+// ============================================================================
+// ABI surface
+// ============================================================================
+
+TEST(AgentPrecompile, SelectorsAreRealKeccak256)
+{
+    EXPECT_EQ(SELECTOR_VERIFY_AGENT, real_selector("verifyAgent(bytes32,address)"));
+    EXPECT_EQ(SELECTOR_GET_AGENT_ID, real_selector("getAgentId(address)"));
+    EXPECT_EQ(SELECTOR_GET_WALLET, real_selector("getWallet(bytes32)"));
+    EXPECT_EQ(SELECTOR_IS_REGISTERED, real_selector("isRegistered(bytes32)"));
+    EXPECT_EQ(SELECTOR_GET_AGENT_TIER, real_selector("getAgentTier(bytes32)"));
+    EXPECT_EQ(SELECTOR_GET_REPUTATION, real_selector("getReputation(bytes32)"));
+}
+
+TEST(AgentPrecompile, RegisteredAtProtocolAddress)
+{
+    using Traits = monad::EvmTraits<EVMC_PRAGUE>;
+    EXPECT_EQ(AGENT_PRECOMPILE_ADDRESS, 0x0101u);
+    EXPECT_TRUE(is_precompile<Traits>(Address{0x0101}));
+    EXPECT_FALSE(is_precompile<Traits>(Address{0x0201}));
+
+    AgentStateTable table;
+    ScopedAgentStateTableContext const ctx{table};
+    auto const input = make_input(SELECTOR_GET_AGENT_ID, ABI_WORD);
+    evmc_message const msg{
+        .gas = 10'000,
+        .input_data = input.data(),
+        .input_size = input.size(),
+        .code_address = Address{0x0101},
+    };
+    auto const result = check_call_eth_precompile<Traits>(msg);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->status_code, EVMC_SUCCESS);
+    EXPECT_EQ(
+        result->gas_left, static_cast<int64_t>(10'000 - AGENT_LOOKUP_GAS));
+    ASSERT_EQ(result->output_size, ABI_WORD);
+    for (size_t i = 0; i < result->output_size; ++i) {
+        EXPECT_EQ(result->output_data[i], 0);
+    }
+}
 
 // ============================================================================
 // Gas cost metering
@@ -248,12 +299,12 @@ TEST(AgentPrecompile, ExecuteWithoutScopedContextFails)
 
 TEST(AgentPrecompile, SelectorConstantsMatchRust)
 {
-    EXPECT_EQ(SELECTOR_VERIFY_AGENT, 0x85504c3fu);
-    EXPECT_EQ(SELECTOR_GET_AGENT_ID, 0x736f42f1u);
-    EXPECT_EQ(SELECTOR_GET_WALLET, 0x697b79e5u);
-    EXPECT_EQ(SELECTOR_IS_REGISTERED, 0x3d3e1996u);
-    EXPECT_EQ(SELECTOR_GET_AGENT_TIER, 0x8ca719ceu);
-    EXPECT_EQ(SELECTOR_GET_REPUTATION, 0x5a1c253bu);
+    EXPECT_EQ(SELECTOR_VERIFY_AGENT, 0xd7f64027u);
+    EXPECT_EQ(SELECTOR_GET_AGENT_ID, 0x042324b6u);
+    EXPECT_EQ(SELECTOR_GET_WALLET, 0x789d392au);
+    EXPECT_EQ(SELECTOR_IS_REGISTERED, 0x27258b22u);
+    EXPECT_EQ(SELECTOR_GET_AGENT_TIER, 0xf31ec6c1u);
+    EXPECT_EQ(SELECTOR_GET_REPUTATION, 0xd14519d2u);
 }
 
 TEST(AgentPrecompile, GasConstantsMatchRust)

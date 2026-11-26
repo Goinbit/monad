@@ -726,8 +726,8 @@ TYPED_TEST(TraitsTest, simulate_v1_trace)
                 .topics =
                     std::vector{
                         0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef_bytes32,
-                        0x0000000000000000000000000000000000000000000000000000000000000100_bytes32,
-                        0x0000000000000000000000000000000000000000000000000000000000000101_bytes32,
+                        abi_encode_address(ADDR_A),
+                        abi_encode_address(ADDR_B),
                     },
                 .address = 0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee_address,
             },
@@ -831,8 +831,8 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_selfdestruct)
             .topics =
                 std::vector{
                     0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef_bytes32,
-                    0x0000000000000000000000000000000000000000000000000000000000000101_bytes32,
-                    0x0000000000000000000000000000000000000000000000000000000000000102_bytes32,
+                    abi_encode_address(ADDR_B),
+                    abi_encode_address(ADDR_C),
                 },
             .address = 0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee_address,
         },

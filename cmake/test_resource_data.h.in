@@ -61,7 +61,16 @@ MONAD_TEST_NAMESPACE_BEGIN
 inline constexpr auto ADDR_A =
     0x0000000000000000000000000000000000000100_address;
 inline constexpr auto ADDR_B =
+    0x0000000000000000000000000000000000000201_address;
+// Keep load_db()'s historical state root stable while 0x0101 is reserved for
+// the always-active Meritium Agent precompile.
+inline constexpr auto ADDR_B_TRIE_FIXTURE =
     0x0000000000000000000000000000000000000101_address;
+static_assert(
+    ADDR_B != monad::Address{0x0000000000000000000000000000000000000101});
+static_assert(
+    ADDR_B_TRIE_FIXTURE ==
+    monad::Address{0x0000000000000000000000000000000000000101});
 inline constexpr auto ADDR_C =
     0x0000000000000000000000000000000000000102_address;
 inline auto const A_CODE =
@@ -137,7 +146,7 @@ inline void load_db(TrieDb &db, uint64_t const n)
                      {{bytes32_t{},
                        {bytes32_t{},
                         0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe_bytes32}}}}},
-            {ADDR_B,
+            {ADDR_B_TRIE_FIXTURE,
              StateDelta{
                  .account =
                      {std::nullopt,
